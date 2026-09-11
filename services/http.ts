@@ -276,35 +276,86 @@ api.interceptors.response.use(
 );
 
 // ---------------------------------------------------------------------------
-// ApiError — typed error wrapper (unchanged from original)
+// ApiError — typed error wrapper
 // ---------------------------------------------------------------------------
 
 /**
  * Typed error wrapper for API failures.
- * Normalises axios errors into a simple { status, message, code } shape that hooks
- * can catch without importing axios directly.
+ *
+ * Normalises axios errors into a structured shape that auth hooks can catch
+ * and classify without importing axios directly.
+ *
+ * Extra fields beyond the original:
+ *   retryAfter   — parsed value of the Retry-After response header (seconds),
+ *                  or null when absent.  Auth flows MUST use this instead of
+ *                  any hardcoded constant whenever it is present.
+ *   responseCode — the body-level `responseCode` field echoed by the backend
+ *                  (e.g. 200, 400, 429, 500).  HTTP status and body responseCode
+ *                  can differ — the backend controller maps non-200 AuthModel
+ *                  results to HTTP 400 regardless of the body responseCode.
  */
 export class ApiError extends Error {
+  /** HTTP status code (0 when there was no response — e.g. network error). */
+  public readonly status: number;
+  /** Optional error code returned by the backend (e.g. "TOKEN_EXPIRED"). */
+  public readonly code: string | undefined;
+  /**
+   * Value of the Retry-After response header parsed as an integer number of
+   * seconds, or null when the header is absent or unparseable.
+   */
+  public readonly retryAfter: number | null;
+  /**
+   * Body-level `responseCode` field returned by the backend.
+   * Distinct from the HTTP status — the controller converts many non-200
+   * AuthModel results into HTTP 400 while leaving `responseCode` at its
+   * original value (e.g. 500 for network/Supabase failures).
+   */
+  public readonly responseCode: number | null;
+
   constructor(
-    public readonly status: number,
+    status: number,
     message: string,
-    public readonly code?: string,
+    code?: string,
+    retryAfter: number | null = null,
+    responseCode: number | null = null,
   ) {
     super(message);
     this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.retryAfter = retryAfter;
+    this.responseCode = responseCode;
   }
 
   /** Build an ApiError from an unknown catch value. */
   static from(err: unknown): ApiError {
     if (axios.isAxiosError(err)) {
-      const axiosErr = err as AxiosError<{ message?: string; code?: string }>;
+      const axiosErr = err as AxiosError<{
+        message?: string;
+        code?: string;
+        responseCode?: number;
+      }>;
       const status = axiosErr.response?.status ?? 0;
       const message =
         axiosErr.response?.data?.message ??
         axiosErr.message ??
         `HTTP ${status}`;
       const code = axiosErr.response?.data?.code;
-      return new ApiError(status, message, code);
+
+      // Parse Retry-After header — Axios normalises header names to lowercase.
+      const retryAfterRaw = axiosErr.response?.headers?.["retry-after"];
+      const retryAfter =
+        typeof retryAfterRaw === "string" && /^\d+$/.test(retryAfterRaw.trim())
+          ? parseInt(retryAfterRaw.trim(), 10)
+          : null;
+
+      // Body-level responseCode (may differ from HTTP status).
+      const responseCode =
+        typeof axiosErr.response?.data?.responseCode === "number"
+          ? axiosErr.response.data.responseCode
+          : null;
+
+      return new ApiError(status, message, code, retryAfter, responseCode);
     }
     if (err instanceof ApiError) return err;
     return new ApiError(0, "Something went wrong.");

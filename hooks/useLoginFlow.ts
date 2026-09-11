@@ -5,11 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { isValidPhone } from "@/lib/validators";
 import { isValidOtp } from "@/lib/validators";
 import { sendOtp, verifyOtp } from "@/services/auth.service";
-import { ApiError } from "@/services/http";
 import { OTP_LENGTH, RESEND_SECONDS } from "@/lib/constants/auth";
 import { createSupabaseBrowserClient } from "@/services/supabase/client";
 import { useAuthStore } from "@/store/auth.store";
 import { fetchProfileWithAddresses } from "@/services/profile.service";
+import { classifyAuthError } from "@/lib/errors/auth.errors";
+import { toast } from "@/lib/toast";
 import type { LoginStep } from "@/types/auth.types";
 
 // ---------------------------------------------------------------------------
@@ -28,17 +29,30 @@ function emptyOtp(): string[] {
  * Single hook that owns the entire phone → OTP → success login flow.
  *
  * State shape (flat):
- *   step, phone, otp, verificationId, countdown, loading, error
+ *   step, phone, otp, verificationId, countdown, loading, isResending, error
  *
  * One loading/error pair shared across all steps — only one step is active at
  * a time, so there is no ambiguity about which operation is in-flight.
+ *
+ * Error handling:
+ *   All API errors flow through classifyAuthError() in lib/errors/auth.errors.ts.
+ *   Raw provider / backend strings are NEVER shown to users.
+ *   Both an inline error and a Sonner toast are shown for every auth failure.
+ *
+ * Resend behaviour:
+ *   1. User clicks Resend.
+ *   2. isResending is set → button disabled, duplicate clicks prevented.
+ *   3. API is called.
+ *   4. On success: verificationId updated, OTP cleared, countdown started at RESEND_SECONDS.
+ *   5. On 429: Retry-After header is used as countdown duration (not RESEND_SECONDS).
+ *   6. On other error: inline error + toast shown, countdown NOT started.
  *
  * Flow:
  *   1. User enters phone → handlePhoneSubmit → sendOtp → step "otp"
  *   2. User enters OTP  → handleOtpSubmit  → verifyOtp → setSession
  *                       → fetchProfileWithAddresses → populate store
  *                       → existing user (has address) → router.push(redirectTo)
- *                       → new user (no address)       → step "success"
+ *                       → new user (no address)       → step "create_profile"
  *   3. Resend           → handleResend → sendOtp → refresh verificationId + countdown
  */
 export function useLoginFlow() {
@@ -59,7 +73,9 @@ export function useLoginFlow() {
   // ── OTP step state ────────────────────────────────────────────────────────
   const [otp, setOtp] = useState<string[]>(emptyOtp);
   const [verificationId, setVerificationId] = useState("");
-  const [countdown, setCountdown] = useState<number>(RESEND_SECONDS);
+  const [countdown, setCountdown] = useState<number>(0);
+  /** True while a resend request is in-flight — prevents duplicate clicks. */
+  const [isResending, setIsResending] = useState(false);
 
   // ── Auth store ────────────────────────────────────────────────────────────
   const { setAuth, setProfile, setAddresses, setLoading: setStoreLoading, setInitialized } =
@@ -92,23 +108,25 @@ export function useLoginFlow() {
     try {
       const response = await sendOtp(phone);
 
-      if (response.success === false || !response.verificationId || response.responseCode >= 400) {
-        setError(response.message || "Could not initiate OTP session. Please try again.");
+      // Backend returns HTTP 200 on success; Axios only throws on 4xx/5xx.
+      // The only way we reach here is a genuine success response.
+      if (!response.verificationId || response.responseCode >= 400) {
+        // Body-level failure (e.g. MC returned no verificationId) without an
+        // HTTP error — treat as a provider send failure.
+        setError("Could not initiate OTP session. Please try again.");
+        toast.error("OTP send failed", "Could not initiate OTP session. Please try again.");
         return;
       }
 
-      // Advance to OTP step
+      // Advance to OTP step.
       setVerificationId(response.verificationId);
       setOtp(emptyOtp());
       setCountdown(RESEND_SECONDS);
       setStep("otp");
-    } catch (err: any) {
-      const errorMessage =
-        err.response?.data?.message ||
-        (err instanceof ApiError ? err.message : null) ||
-        err.message ||
-        "Something went wrong. Please try again.";
-      setError(errorMessage);
+    } catch (err: unknown) {
+      const result = classifyAuthError(err, "send_otp");
+      setError(result.inlineMessage);
+      toast.error(result.toastTitle, result.toastDescription);
     } finally {
       setLoading(false);
     }
@@ -140,14 +158,17 @@ export function useLoginFlow() {
       // ── Step 1: Verify OTP with backend ──────────────────────────────────
       const response = await verifyOtp(phone, otp.join(""), verificationId);
 
+      // Success is HTTP 200 with responseCode 200.
+      // Any non-success HTTP status throws in Axios and goes to catch below.
+      // Check for body-level failure signals (no session / wrong status).
       if (
         response.verificationStatus !== "VERIFICATION_COMPLETED" ||
         !response.session
       ) {
-        setError(
-          response.message ||
-            "OTP verification failed. Please check the code and try again.",
-        );
+        // Body says failure even though HTTP was 200 — rare edge case.
+        // Treat it as a generic failure; do not expose the raw status string.
+        setError("OTP verification failed. Please check the code and try again.");
+        toast.error("Verification failed", "Please check the code and try again.");
         return;
       }
 
@@ -161,6 +182,7 @@ export function useLoginFlow() {
 
       if (sessionError || !sessionData.session || !sessionData.user) {
         setError("Failed to establish session. Please try again.");
+        toast.error("Session error", "Failed to establish session. Please try again.");
         return;
       }
 
@@ -197,48 +219,65 @@ export function useLoginFlow() {
         setStep("create_profile");
       }
 
-    } catch (err: any) {
-      const serverMessage = err.response?.data?.message;
-      if (serverMessage) {
-        setError(serverMessage);
-      } else {
-        const apiError = ApiError.from(err);
-        if (apiError.status === 400 || apiError.status === 401) {
-          setError("Invalid or expired OTP. Please try again.");
-        } else if (apiError.status === 0) {
-          setError("Network error. Please check your connection and try again.");
-        } else {
-          setError(apiError.message || "Something went wrong. Please try again.");
-        }
-      }
+    } catch (err: unknown) {
+      const result = classifyAuthError(err, "verify_otp");
+      setError(result.inlineMessage);
+      toast.error(result.toastTitle, result.toastDescription);
     } finally {
       setLoading(false);
     }
   }
 
-  /** Resends OTP and refreshes the verificationId and countdown. */
+  /**
+   * Resends OTP and refreshes the verificationId and countdown.
+   *
+   * Correct sequence:
+   *   1. Prevent duplicate clicks (isResending guard).
+   *   2. Call API.
+   *   3. On success: update verificationId, reset OTP, start RESEND_SECONDS countdown.
+   *   4. On 429:     use Retry-After as countdown, show inline + toast error.
+   *   5. On error:   show inline + toast error, do NOT start countdown.
+   */
   const handleResend = useCallback(async () => {
+    if (isResending) return;
+
     setError(null);
-    setOtp(emptyOtp());
-    setCountdown(RESEND_SECONDS);
+    setIsResending(true);
+
     try {
       const response = await sendOtp(phone);
 
-      if (response.success === false || !response.verificationId || response.responseCode >= 400) {
-        setError(response.message || "Could not resend OTP. Please try again.");
+      if (!response.verificationId || response.responseCode >= 400) {
+        // Body-level failure without HTTP error.
+        setError("Could not resend OTP. Please try again.");
+        toast.error("Resend failed", "Could not resend OTP. Please try again.");
         return;
       }
 
+      // Success — update verificationId, reset OTP, start standard cooldown.
       setVerificationId(response.verificationId);
-    } catch (err: any) {
-      const errorMessage =
-        err.response?.data?.message ||
-        (err instanceof ApiError ? err.message : null) ||
-        err.message ||
-        "Failed to resend OTP. Please try again.";
-      setError(errorMessage);
+      setOtp(emptyOtp());
+      setCountdown(RESEND_SECONDS);
+      toast.success("OTP resent", "A new OTP has been sent to your number.");
+    } catch (err: unknown) {
+      const result = classifyAuthError(err, "send_otp");
+
+      // Show inline + toast for all error types.
+      setError(result.inlineMessage);
+      toast.error(result.toastTitle, result.toastDescription);
+
+      // For rate-limit errors, use Retry-After as the countdown so the user
+      // sees how long they actually have to wait — never fall back to the
+      // hardcoded RESEND_SECONDS on a failed resend.
+      if (result.retryAfterSeconds !== null) {
+        setCountdown(result.retryAfterSeconds);
+      }
+      // For non-rate-limit errors, do NOT start a countdown — the resend did
+      // not succeed, so there is nothing to count down from.
+    } finally {
+      setIsResending(false);
     }
-  }, [phone]);
+  }, [phone, isResending]);
 
   // ── Public API ────────────────────────────────────────────────────────────
 
@@ -254,6 +293,7 @@ export function useLoginFlow() {
     // OTP step
     otp,
     countdown,
+    isResending,
     handleOtpChange,
     handleOtpSubmit,
     handleResend,
