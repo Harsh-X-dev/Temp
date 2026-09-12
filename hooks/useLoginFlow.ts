@@ -12,6 +12,7 @@ import { fetchProfileWithAddresses } from "@/services/profile.service";
 import { classifyAuthError } from "@/lib/errors/auth.errors";
 import { toast } from "@/lib/toast";
 import type { LoginStep } from "@/types/auth.types";
+import type { UserProfile, Address } from "@/components/account/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -181,6 +182,9 @@ export function useLoginFlow() {
       }
 
       // ── Step 2: Establish Supabase session ───────────────────────────────
+      // Mark store loading to ensure AuthProvider's SIGNED_IN event does not race
+      setStoreLoading(true);
+
       const supabase = createSupabaseBrowserClient();
       const { data: sessionData, error: sessionError } =
         await supabase.auth.setSession({
@@ -189,42 +193,72 @@ export function useLoginFlow() {
         });
 
       if (sessionError || !sessionData.session || !sessionData.user) {
+        setStoreLoading(false);
         setError("Failed to establish session. Please try again.");
         toast.error("Session error", "Failed to establish session. Please try again.");
         return;
       }
 
-      // ── Step 3: Populate auth store ──────────────────────────────────────
+      // ── Step 3: Immediately establish authenticated state in auth store ───
       setAuth(sessionData.user, sessionData.session);
 
-      // ── Step 4: Check if profile exists in Supabase ──────────────────────
-      setStoreLoading(true);
-      const { profile, addresses } = await fetchProfileWithAddresses(supabase);
+      // ── Step 4: Resolve the profile ONCE from useLoginFlow ────────────────
+      type ProfileResolution =
+        | { status: "complete"; profile: UserProfile; addresses: Address[] }
+        | { status: "incomplete"; profile: UserProfile; addresses: Address[] }
+        | { status: "not_found" }
+        | { status: "error"; error: unknown };
 
-      const isProfileComplete =
-        profile &&
-        profile.fullName?.trim() &&
-        profile.phone &&
-        addresses.length > 0;
+      let resolution: ProfileResolution;
+      try {
+        const { profile, addresses } = await fetchProfileWithAddresses(supabase);
 
-      if (isProfileComplete) {
-        console.log("Complete profile exists");
+        if (!profile) {
+          resolution = { status: "not_found" };
+        } else if (profile.fullName?.trim()) {
+          resolution = { status: "complete", profile, addresses };
+        } else {
+          resolution = { status: "incomplete", profile, addresses };
+        }
+      } catch (profileErr: unknown) {
+        resolution = { status: "error", error: profileErr };
+      }
 
-        setProfile(profile);
-        setAddresses(addresses);
-        setStoreLoading(false);
-        setInitialized(true);
+      // ── Step 5: Handle the result explicitly ──────────────────────────────
+      switch (resolution.status) {
+        case "complete": {
+          setProfile(resolution.profile);
+          setAddresses(resolution.addresses);
+          setStoreLoading(false);
+          setInitialized(true);
+          router.push(redirectTo || "/");
+          break;
+        }
 
-        console.log("Redirecting to", redirectTo);
-        router.push(redirectTo);
-      } else {
-        console.log("Profile exists but is incomplete");
+        case "incomplete": {
+          setProfile(resolution.profile);
+          setAddresses(resolution.addresses);
+          setStoreLoading(false);
+          setInitialized(true);
+          setStep("create_profile");
+          break;
+        }
 
-        setProfile(profile ?? null);
-        setAddresses(addresses);
-        setStoreLoading(false);
-        setInitialized(true);
-        setStep("create_profile");
+        case "not_found": {
+          setProfile(null);
+          setAddresses([]);
+          setStoreLoading(false);
+          setInitialized(true);
+          setStep("create_profile");
+          break;
+        }
+
+        case "error": {
+          setStoreLoading(false);
+          setError("Failed to load profile. Please try again.");
+          toast.error("Profile Error", "Could not load user profile. Please try again.");
+          break;
+        }
       }
 
     } catch (err: unknown) {

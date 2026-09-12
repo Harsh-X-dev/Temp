@@ -59,9 +59,8 @@ export default function LoginFlow() {
       setProfile(updatedProfile);
       setAddresses(updatedAddresses);
 
-      // If an explicit redirect destination was provided (e.g. /checkout), honor it;
-      // otherwise, default newly registered users to their profile page.
-      const destination = !redirectTo || redirectTo === "/" ? "/profile" : redirectTo;
+      // Default to / unless an explicit redirect destination was provided (e.g. /checkout)
+      const destination = redirectTo || "/";
       router.push(destination);
     } catch (err: any) {
       setProfileError(err.message || "Failed to create profile. Please try again.");

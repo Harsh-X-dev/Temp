@@ -43,9 +43,11 @@ export default function AuthProvider({
         setProfile(profile);
         setAddresses(addresses);
       } catch {
-        // Non-fatal: profile missing is handled gracefully per-page
-        setProfile(null);
-        setAddresses([]);
+        // Non-fatal: do not overwrite profile if already established
+        if (!useAuthStore.getState().profile) {
+          setProfile(null);
+          setAddresses([]);
+        }
       }
 
       // Sync & load user's wishlist from Supabase
@@ -87,7 +89,14 @@ export default function AuthProvider({
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         if (session?.user) {
           setAuth(session.user, session);
-          await loadUserData(session.user.id);
+          // Do not race with useLoginFlow when it is actively establishing auth and resolving profile
+          if (!useAuthStore.getState().loading) {
+            await loadUserData(session.user.id);
+          } else if (session.user.id) {
+            useWishlistStore.getState().loadUserWishlist(session.user.id).catch((err) => {
+              console.error("[AuthProvider] Wishlist sync error:", err);
+            });
+          }
         }
       } else if (event === "SIGNED_OUT") {
         clear();
