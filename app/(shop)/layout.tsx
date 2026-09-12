@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Navbar from "@/components/layout/Navbar";
 import BottomNav from "@/components/layout/BottomNav";
 
@@ -12,11 +13,15 @@ export default function ShopLayout({
 }) {
   return (
     <div className="flex min-h-[100dvh] w-full max-w-full flex-col overflow-x-clip bg-surface-subtle">
-      <Navbar />
+      <Suspense fallback={null}>
+        <Navbar />
+      </Suspense>
       <main className="flex flex-col flex-1 w-full max-w-full overflow-x-clip">
         {children}
       </main>
-      <BottomNav />
+      <Suspense fallback={null}>
+        <BottomNav />
+      </Suspense>
     </div>
   );
 }

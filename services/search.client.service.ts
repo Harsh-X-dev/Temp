@@ -97,14 +97,25 @@ export function logProductEngagementClick(productId: string, productTitle: strin
 }
 
 export async function fetchLiveSuggestions(query: string): Promise<Product[]> {
-  if (!query || query.trim() === '') return [];
+  const trimmed = query.trim();
+  if (!trimmed) return [];
   const supabase = createSupabaseBrowserClient();
+
+  const words = trimmed.split(/\s+/).filter((w) => w.length > 1);
+  const keywords = words.length > 0 ? words : [trimmed];
+
+  const orConditions = [
+    `title.ilike."%${trimmed}%"`,
+    ...keywords.map((w) => `title.ilike."%${w}%"`),
+    ...keywords.map((w) => `slug.ilike."%${w}%"`),
+  ];
+
   const { data, error } = await supabase
     .from('products')
     .select(PRODUCT_SELECT)
     .eq('status', 'active')
-    .ilike('title', `%${query.trim()}%`)
-    .limit(5)
+    .or(orConditions.join(','))
+    .limit(6)
     .returns<ProductRow[]>();
 
   if (error) {
@@ -114,64 +125,96 @@ export async function fetchLiveSuggestions(query: string): Promise<Product[]> {
   return (data ?? []).map(mapRowToProduct);
 }
 
-export async function fetchSearchResults(query: string, sortBy: string = 'relevance'): Promise<Product[]> {
-  const trimmed = query.trim();
-  if (!trimmed) return [];
-  const supabase = createSupabaseBrowserClient();
-  
-  // 1. Primary multi-field search (title, slug, short_description)
-  const { data, error } = await supabase
-    .from('products')
-    .select(PRODUCT_SELECT)
-    .eq('status', 'active')
-    .or(`title.ilike.%${trimmed}%,slug.ilike.%${trimmed}%,short_description.ilike.%${trimmed}%`)
-    .limit(40)
-    .returns<ProductRow[]>();
+const STOP_WORDS = new Set(['in', 'of', 'for', 'with', 'and', 'the', 'a', 'an', 'to', 'at', 'on', 'by', 'is']);
 
-  if (error) {
-    console.error('[SearchClientService] Failed to fetch search results:', error.message);
-    return [];
-  }
-  
-  let products = (data ?? []).map(mapRowToProduct);
-
-  // 2. Tokenized fallback if exact phrase yielded 0 results and multiple words exist
-  if (products.length === 0 && trimmed.includes(' ')) {
-    const words = trimmed.split(/\s+/).filter((w) => w.length > 2);
-    if (words.length > 0) {
-      const orFilter = words.map((w) => `title.ilike.%${w}%,slug.ilike.%${w}%`).join(',');
-      const { data: fallbackData } = await supabase
-        .from('products')
-        .select(PRODUCT_SELECT)
-        .eq('status', 'active')
-        .or(orFilter)
-        .limit(40)
-        .returns<ProductRow[]>();
-
-      if (fallbackData && fallbackData.length > 0) {
-        products = fallbackData.map(mapRowToProduct);
-      }
-    }
-  }
-  
+function sortProducts(products: Product[], sortBy: string): Product[] {
   if (sortBy === 'price_asc') {
-    products.sort((a, b) => {
+    return products.sort((a, b) => {
       const pA = parseInt(a.price.replace(/[^\d]/g, ''), 10) || 0;
       const pB = parseInt(b.price.replace(/[^\d]/g, ''), 10) || 0;
       return pA - pB;
     });
   } else if (sortBy === 'price_desc') {
-    products.sort((a, b) => {
+    return products.sort((a, b) => {
       const pA = parseInt(a.price.replace(/[^\d]/g, ''), 10) || 0;
       const pB = parseInt(b.price.replace(/[^\d]/g, ''), 10) || 0;
       return pB - pA;
     });
   } else if (sortBy === 'rating_desc' || sortBy === 'rating') {
-    products.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+    return products.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
   }
-
   return products;
 }
+
+export async function fetchSearchResults(query: string, sortBy: string = 'relevance'): Promise<Product[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  const supabase = createSupabaseBrowserClient();
+  
+  // 1. Primary: Exact phrase match on title or slug
+  const { data: phraseData, error: phraseErr } = await supabase
+    .from('products')
+    .select(PRODUCT_SELECT)
+    .eq('status', 'active')
+    .or(`title.ilike."%${trimmed}%",slug.ilike."%${trimmed.toLowerCase().replace(/\s+/g, '-')}%"`)
+    .limit(30)
+    .returns<ProductRow[]>();
+
+  if (!phraseErr && phraseData && phraseData.length > 0) {
+    const products = phraseData.map(mapRowToProduct);
+    return sortProducts(products, sortBy);
+  }
+
+  // 2. Multi-word AND search (all meaningful keywords must be present in product title)
+  const meaningfulWords = trimmed
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length > 1 && !STOP_WORDS.has(w.toLowerCase()));
+
+  const wordsToMatch = meaningfulWords.length > 0 ? meaningfulWords : [trimmed];
+
+  let andQuery = supabase
+    .from('products')
+    .select(PRODUCT_SELECT)
+    .eq('status', 'active');
+
+  for (const w of wordsToMatch) {
+    andQuery = andQuery.ilike('title', `%${w}%`);
+  }
+
+  const { data: andData, error: andErr } = await andQuery.limit(30).returns<ProductRow[]>();
+
+  if (!andErr && andData && andData.length > 0) {
+    const products = andData.map(mapRowToProduct);
+    return sortProducts(products, sortBy);
+  }
+
+  // 3. Last fallback: search for primary keyword
+  if (wordsToMatch.length > 0) {
+    const { data: fallbackData } = await supabase
+      .from('products')
+      .select(PRODUCT_SELECT)
+      .eq('status', 'active')
+      .ilike('title', `%${wordsToMatch[0]}%`)
+      .limit(20)
+      .returns<ProductRow[]>();
+
+    if (fallbackData && fallbackData.length > 0) {
+      const products = fallbackData.map(mapRowToProduct);
+      return sortProducts(products, sortBy);
+    }
+  }
+
+  return [];
+}
+
+export const DEFAULT_TRENDING_SEARCHES: string[] = [
+  "Siddh Energized Rudraksha Bracelet",
+  "Emerald Pendant in Panchdhatu Setting",
+  "Pyrite Bracelet",
+  "Ganesha Pendant",
+  "5 Mukhi Rudraksha Mala",
+];
 
 /**
  * Fetches top trending searches directly from the Product Engagement API.
@@ -179,45 +222,28 @@ export async function fetchSearchResults(query: string, sortBy: string = 'releva
  */
 export async function fetchTrendingSearches(): Promise<string[]> {
   try {
-    const res = await fetch(`${config.apiBaseUrl}/count/trending?limit=8`, {
+    const res = await fetch(`${config.apiBaseUrl}/count/trending?limit=5`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
 
     if (res.ok) {
       const json = await res.json();
-      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+      if (json.success && Array.isArray(json.data) && json.data.length >= 3) {
         const titles: string[] = json.data
           .map((item: { product_title?: string; productTitle?: string }) => item.product_title || item.productTitle)
           .filter((t: unknown): t is string => Boolean(t && typeof t === 'string' && t.trim().length > 0));
 
         const uniqueTitles = Array.from(new Set(titles));
-        if (uniqueTitles.length >= 4) {
-          return uniqueTitles.slice(0, 8);
+        if (uniqueTitles.length >= 3) {
+          return uniqueTitles.slice(0, 5);
         }
-
-        const curated = [
-          'Rudraksha Bracelet',
-          'Yellow Sapphire',
-          'Emerald Pendant',
-          'Pyrite Bracelet',
-          'Ganesha Pendant',
-          '7 Mukhi Rudraksha',
-        ];
-        return Array.from(new Set([...uniqueTitles, ...curated])).slice(0, 8);
       }
     }
   } catch (err) {
     console.warn('[SearchClientService] Failed to fetch live trending searches, using fallback:', err);
   }
 
-  return [
-    'Rudraksha Bracelet',
-    'Yellow Sapphire',
-    'Emerald Pendant',
-    'Pyrite Bracelet',
-    'Ganesha Pendant',
-    '7 Mukhi Rudraksha',
-  ];
+  return DEFAULT_TRENDING_SEARCHES;
 }
 

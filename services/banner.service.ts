@@ -21,6 +21,18 @@ interface BannerRow {
   sort_order: number;
 }
 
+const DEFAULT_HERO_BANNERS: Banner[] = [
+  {
+    id: "hero-default-1",
+    title: "100% Lab-Certified Spiritual Gemstones",
+    subtitle: "NATURALLY ENERGIZED",
+    buttonText: "Shop Collection",
+    buttonHref: "/collection/all",
+    image: "/assets/images/hero_section_new_arrival.png",
+    imageAlt: "100% Lab-Certified Spiritual Gemstones",
+  },
+];
+
 /**
  * Fetch all active homepage hero banners, ordered by sort_order ascending.
  *
@@ -28,31 +40,34 @@ interface BannerRow {
  *  - is_active = true   (respected by RLS policy "public can read active banners")
  *  - placement = 'homepage_hero'
  *
- * Returns an empty array on error so the carousel degrades gracefully.
+ * Returns default fallback banners on empty / error for instant zero-latency loading.
  */
 export async function getHomeBanners(): Promise<Banner[]> {
-  const supabase = createSupabaseServerClient();
+  try {
+    const supabase = createSupabaseServerClient();
 
-  const { data, error } = await supabase
-    .from("banners")
-    .select("id, title, image_url, link_url, sort_order")
-    .eq("is_active", true)
-    .eq("placement", "homepage_hero")
-    .order("sort_order", { ascending: true })
-    .returns<BannerRow[]>();
+    const { data, error } = await supabase
+      .from("banners")
+      .select("id, title, image_url, link_url, sort_order")
+      .eq("is_active", true)
+      .eq("placement", "homepage_hero")
+      .order("sort_order", { ascending: true })
+      .returns<BannerRow[]>();
 
-  if (error) {
-    // Log the error server-side for observability; return empty array so
-    // the UI doesn't crash. The carousel handles [] with a null render.
-    console.error("[BannerService] Failed to fetch banners:", error.message);
-    return [];
+    if (error) {
+      console.warn("[BannerService] Database query error, using fallback:", error.message);
+      return DEFAULT_HERO_BANNERS;
+    }
+
+    if (!data || data.length === 0) {
+      return DEFAULT_HERO_BANNERS;
+    }
+
+    return data.map(mapRowToBanner);
+  } catch (err) {
+    console.warn("[BannerService] Failed to fetch banners:", err);
+    return DEFAULT_HERO_BANNERS;
   }
-
-  if (!data || data.length === 0) {
-    return [];
-  }
-
-  return data.map(mapRowToBanner);
 }
 
 /**

@@ -10,18 +10,22 @@ import ProductGrid from "@/components/ui/data-display/ProductGrid";
 import { matchesTypeFilter, matchesMukhiFilter, matchesOriginFilter } from "@/lib/productFilters";
 
 export const revalidate = 60;
+export const dynamicParams = true;
 
 // ---------------------------------------------------------------------------
-
 // Static pre-rendering — build pages for all active collection slugs
 // ---------------------------------------------------------------------------
 export async function generateStaticParams() {
   try {
     const collections = await getActiveCollections();
-    return collections.map((cat) => ({ slug: cat.id }));
+    const slugs = collections.map((cat) => ({ slug: cat.id }));
+    if (!slugs.some((s) => s.slug === "all")) {
+      slugs.unshift({ slug: "all" });
+    }
+    return slugs;
   } catch {
     // If the DB is unreachable at build time, fall back to on-demand rendering
-    return [];
+    return [{ slug: "all" }];
   }
 }
 
@@ -52,6 +56,8 @@ export async function generateMetadata({
 
   return { title, description };
 }
+
+import CollectionClient from "./CollectionClient";
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -138,25 +144,13 @@ export default async function CollectionPage({
   const heading = category.id === "all" ? "All Products" : category.label;
 
   return (
-    <div className="w-full">
-      {/* Page heading */}
-      <h1 className="mb-4 text-lg leading-6 font-bold text-text-primary md:mb-5 md:text-xl md:leading-7 lg:mb-6 lg:text-2xl lg:leading-8">
-        {heading}
-      </h1>
-
-      {/* Filter / sort bar */}
-      <div className="mb-5 md:mb-6">
-        <FilterBar
-          productCount={products.length}
-          categories={categories}
-          currentSlug={slug}
-          currentSort={sort}
-          filterMetadata={filterMetadata}
-        />
-      </div>
-
-      {/* Product grid */}
-      <ProductGrid products={products} />
-    </div>
+    <CollectionClient
+      heading={heading}
+      slug={slug}
+      sort={sort}
+      categories={categories}
+      filterMetadata={filterMetadata}
+      products={products}
+    />
   );
 }

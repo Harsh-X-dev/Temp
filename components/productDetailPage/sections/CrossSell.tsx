@@ -15,10 +15,10 @@ export default function CrossSell({ products }: CrossSellProps) {
       className="w-full bg-[#fbf8f4] pt-2.5 pb-2"
     >
       {/* Section Header - matches whole page grid (px-4 md:px-8) */}
-      <div className="mb-2.5 px-4 md:px-8">
+      <div className="mb-3 px-4 md:px-8">
         <h2
           id="cross-sell-heading"
-          className="text-[15px] font-semibold text-[#211e1a] leading-[24px]"
+          className="text-[18px] font-bold text-[#1C1917] leading-[24px]"
         >
           You may also like
         </h2>

@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useEffect } from "react";
 import { useHasMounted } from "@/hooks/useHasMounted";
 import ClientLink from "@/components/ui/navigation/ClientLink";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { navItems } from "@/lib/navigation";
 import { NavIcon } from "./NavIcon";
 import { useWishlistStore } from "@/store/wishlist.store";
@@ -20,6 +20,7 @@ function isNavActive(href: string, pathname: string): boolean {
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const mounted = useHasMounted();
   const wishlistIds = useWishlistStore((state) => state.wishlistIds);
@@ -34,9 +35,8 @@ export default function BottomNav() {
   }, [mounted, router]);
 
   const wishlistCount = mounted ? wishlistIds.length : 0;
-
-
-  if (!mounted) return null;
+  const isSearchPage = pathname?.startsWith('/search');
+  const hasSearchQuery = Boolean(searchParams?.get('q'));
 
   if (
     pathname === '/' ||
@@ -44,7 +44,30 @@ export default function BottomNav() {
     pathname === '/wishlist' ||
     pathname?.startsWith('/collection')
   ) {
-    return createPortal(
+    if (!mounted) {
+      return (
+        <nav
+          aria-label="Loading bottom navigation"
+          className="fixed inset-x-0 bottom-0 z-[100] w-full bg-white border-t border-[#e5e0da] lg:hidden"
+          style={{
+            bottom: 0,
+            paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0px)",
+            boxShadow: "0 -2px 10px rgba(0,0,0,0.05)",
+          }}
+        >
+          <div className="relative mx-auto flex max-w-lg items-center justify-between px-6 py-2.5">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex flex-col items-center justify-center gap-1 min-w-[64px]">
+                <div className="size-[20px] rounded-[4px] animate-shimmer" />
+                <div className="h-[8px] w-[32px] rounded-[4px] animate-shimmer" />
+              </div>
+            ))}
+          </div>
+        </nav>
+      );
+    }
+
+    return (
       <nav
         aria-label="Bottom navigation"
         className="fixed inset-x-0 bottom-0 z-[100] w-full bg-white border-t border-[#e5e0da] lg:hidden"
@@ -84,8 +107,7 @@ export default function BottomNav() {
             );
           })}
         </div>
-      </nav>,
-      document.body
+      </nav>
     );
   }
 

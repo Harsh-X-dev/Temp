@@ -8,7 +8,14 @@ import FormField, { fieldInputClasses } from "@/components/ui/inputs/FormField";
 import DatePickerDropdown from "@/components/ui/inputs/DatePickerDropdown";
 import Select from "@/components/ui/inputs/Select";
 import GenderDropdown from "@/components/ui/inputs/GenderDropdown";
-import { INDIAN_STATES, PINCODE_PATTERN } from "@/lib/constants/india";
+import { INDIAN_STATES } from "@/lib/constants/india";
+import {
+  isValidFullName,
+  isValidPhone,
+  isValidEmail,
+  isValidPincode,
+  isValidState,
+} from "@/lib/validators";
 import type { AddressType } from "@/components/account/types";
 import type { CreateProfileInput } from "@/types/checkout.types";
 
@@ -24,7 +31,7 @@ interface InitialProfileCreationSheetProps {
 
 const ADDRESS_TYPES = ["home", "work", "other"] as const;
 
-type Errors = Partial<Record<"fullName" | "pincode" | "line1" | "city" | "state", string>>;
+type Errors = Partial<Record<"fullName" | "phone" | "email" | "pincode" | "line1" | "city" | "state", string>>;
 
 export default function InitialProfileCreationSheet({
   isOpen,
@@ -64,15 +71,38 @@ export default function InitialProfileCreationSheet({
 
   const validate = (): boolean => {
     const errs: Errors = {};
-    if (!fullName.trim()) errs.fullName = "Full name is required";
+    const trimmedName = fullName.trim();
+    if (!trimmedName) {
+      errs.fullName = "Full name is required";
+    } else if (!isValidFullName(trimmedName)) {
+      errs.fullName = "Enter a valid name";
+    }
+
+    if (phone && !isValidPhone(phone)) {
+      errs.phone = "Enter a valid 10-digit phone number";
+    }
+
+    const trimmedEmail = email.trim();
+    if (trimmedEmail && !isValidEmail(trimmedEmail)) {
+      errs.email = "Enter a valid email address";
+    }
 
     const trimmedPincode = pincode.trim();
-    if (!trimmedPincode) errs.pincode = "Pincode is required";
-    else if (!PINCODE_PATTERN.test(trimmedPincode)) errs.pincode = "Enter a valid 6-digit pincode";
+    if (!trimmedPincode) {
+      errs.pincode = "Pincode is required";
+    } else if (!isValidPincode(trimmedPincode)) {
+      errs.pincode = "Enter a valid 6-digit pincode";
+    }
 
     if (!line1.trim()) errs.line1 = "House / Flat / Floor is required";
     if (!city.trim()) errs.city = "City is required";
-    if (!state.trim()) errs.state = "State is required";
+
+    const trimmedState = state.trim();
+    if (!trimmedState) {
+      errs.state = "State is required";
+    } else if (!isValidState(trimmedState)) {
+      errs.state = "Select a valid state";
+    }
 
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -156,7 +186,12 @@ export default function InitialProfileCreationSheet({
               </div>
             </div>
 
-            <FormField label="Email (optional)" htmlFor={fieldId("email")}>
+            <FormField
+              label="Email (optional)"
+              htmlFor={fieldId("email")}
+              error={errors.email}
+              errorId={errorId("email")}
+            >
               <input
                 id={fieldId("email")}
                 name="email"
@@ -164,8 +199,13 @@ export default function InitialProfileCreationSheet({
                 autoComplete="email"
                 placeholder="Enter email address"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={fieldInputClasses(false)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  clearError("email");
+                }}
+                aria-invalid={errors.email ? true : undefined}
+                aria-describedby={errors.email ? errorId("email") : undefined}
+                className={fieldInputClasses(Boolean(errors.email))}
               />
             </FormField>
 
@@ -193,11 +233,10 @@ export default function InitialProfileCreationSheet({
                 type="text"
                 inputMode="numeric"
                 autoComplete="postal-code"
-                maxLength={6}
                 placeholder="Enter pincode"
                 value={pincode}
                 onChange={(e) => {
-                  setPincode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                  setPincode(e.target.value);
                   clearError("pincode");
                 }}
                 aria-invalid={errors.pincode ? true : undefined}

@@ -34,35 +34,30 @@ const TrashIcon = () => (
 
 function WishlistSkeleton() {
   return (
-    <div className="flex flex-col w-full px-[16px] md:px-0 gap-6 pt-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="flex gap-3 w-full animate-pulse">
-          <div className="w-[100px] h-[100px] bg-border-strong rounded-[12px] shrink-0" />
-          <div className="flex flex-col flex-1 py-1 gap-2">
-            <div className="h-4 bg-border-strong rounded w-3/4" />
-            <div className="h-3 bg-border-strong rounded w-1/4 mt-auto" />
-            <div className="flex items-center justify-between mt-auto">
-              <div className="h-4 bg-border-strong rounded w-16" />
-              <div className="h-7 bg-border-strong rounded-[20px] w-20" />
-            </div>
-          </div>
+    <div className="flex flex-col w-full flex-1 min-h-[50vh] items-center justify-center py-24">
+      <div className="flex flex-col items-center justify-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="size-2 sm:size-2.5 rounded-full bg-[#D5CFC5] animate-bounce [animation-delay:-0.3s]" />
+          <span className="size-2 sm:size-2.5 rounded-full bg-[#D5CFC5] animate-bounce [animation-delay:-0.15s]" />
+          <span className="size-2 sm:size-2.5 rounded-full bg-[#D5CFC5] animate-bounce" />
         </div>
-      ))}
+        <div className="h-2 w-14 sm:w-16 rounded-full bg-[#EAE3D8] animate-pulse" />
+      </div>
     </div>
   );
 }
 
 function WishlistEmpty() {
   return (
-    <div className="flex flex-col items-center justify-center flex-1 px-[16px] md:px-0 py-20 pb-32 text-center">
-      <div className="w-16 h-16 mb-4 text-text-muted">
+    <div className="flex flex-col items-center justify-center flex-1 px-4 py-20 pb-32 text-center max-w-7xl mx-auto">
+      <div className="w-16 h-16 mb-4 text-[#A8A29E]">
         <svg fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
         </svg>
       </div>
-      <p className="text-[15px] font-semibold text-text-primary">Your wishlist is empty</p>
-      <p className="mt-2 text-[13px] text-text-muted">Save items you love and come back to them anytime.</p>
-      <Link href="/collection/all" className="mt-6 inline-flex items-center rounded-[20px] bg-primary-orange px-6 py-2.5 text-[13px] font-medium text-white transition-colors active:scale-[0.98]">
+      <p className="text-[16px] font-bold text-[#211E1A]">Your wishlist is empty</p>
+      <p className="mt-1.5 text-[13px] text-[#8C847E]">Save items you love and come back to them anytime.</p>
+      <Link href="/collection/all" className="mt-6 inline-flex items-center rounded-full bg-primary-orange px-6 py-2.5 text-[13px] font-semibold text-white transition-all hover:bg-primary-orange-hover active:scale-[0.98] shadow-sm">
         Browse products
       </Link>
     </div>
@@ -84,6 +79,8 @@ type WishlistVariantRow = {
   option3_value?: string | null;
   price: number;
   compare_at_price: number | null;
+  inventory_quantity?: number | null;
+  low_stock_threshold?: number | null;
   is_active: boolean;
 };
 
@@ -109,6 +106,8 @@ type ProcessedProduct = {
   variantId: string;
   variantSku: string;
   variantLabel: string;
+  inventoryQuantity: number | null;
+  lowStockThreshold: number | null;
   options?: any[];
   variants: ProductVariant[];
 };
@@ -140,6 +139,8 @@ function processRow(row: WishlistProductRow): ProcessedProduct {
       option3Value: v.option3_value || null,
       price: v.price,
       compareAtPrice: v.compare_at_price,
+      inventoryQuantity: v.inventory_quantity ?? 0,
+      lowStockThreshold: v.low_stock_threshold ?? 5,
       isActive: v.is_active,
     };
   });
@@ -178,6 +179,8 @@ function processRow(row: WishlistProductRow): ProcessedProduct {
     variantId: cheapest?.id ?? "",
     variantSku: cheapest?.sku ?? "",
     variantLabel: cheapest?.option1_value ?? "",
+    inventoryQuantity: cheapest?.inventory_quantity ?? null,
+    lowStockThreshold: cheapest?.low_stock_threshold ?? 5,
     options,
     variants: mappedVariants,
   };
@@ -260,7 +263,7 @@ export default function WishlistPage() {
             is_energized,
             options,
             product_images ( url, position ),
-            product_variants ( id, sku, option1_value, option2_value, option3_value, price, compare_at_price, is_active )
+            product_variants ( id, sku, option1_value, option2_value, option3_value, price, compare_at_price, inventory_quantity, low_stock_threshold, is_active )
           `,
           )
           .in("id", missingIds); // Only the IDs we don't have yet
@@ -417,10 +420,18 @@ export default function WishlistPage() {
   const count = wishlistProducts.length;
 
   return (
-    <div className="bg-[#fbf8f4] flex flex-col w-full max-w-7xl mx-auto md:px-8 flex-1 h-full pb-10">
-      {/* Header Bar matching Figma node 737:53 */}
-      <div className="bg-white border-b border-[#e5e0da] flex h-[56px] shrink-0 items-center justify-between px-6 md:px-0 w-full">
-        <h1 className="font-bold text-[#211e1a] text-[18px]">Wishlist</h1>
+    <div className="bg-[#FAF5EF] flex flex-col w-full flex-1 min-h-[100dvh] pb-24">
+      {/* Title & Move all to cart header row */}
+      <div className="flex items-center justify-between px-4 sm:px-6 pt-3 pb-2 w-full max-w-7xl mx-auto">
+        <h1 className="font-bold text-[#211E1A] text-[19px] sm:text-[20px] tracking-tight">Wishlist</h1>
+        {count > 0 && !showSkeleton && (
+          <button
+            onClick={handleMoveAllToCart}
+            className="font-semibold text-primary-orange text-[13px] hover:underline active:opacity-70 cursor-pointer"
+          >
+            Move all to cart
+          </button>
+        )}
       </div>
 
       {showSkeleton ? (
@@ -428,106 +439,108 @@ export default function WishlistPage() {
       ) : count === 0 ? (
         <WishlistEmpty />
       ) : (
-        <>
-          {/* Move All Row matching Figma node 737:60 */}
-          <div className="flex justify-end px-6 md:px-0 py-3 w-full shrink-0">
-            <button
-              onClick={handleMoveAllToCart}
-              className="font-medium text-[#ff5400] text-[13px] hover:underline active:opacity-70 cursor-pointer"
-            >
-              Move all to cart
-            </button>
-          </div>
+        <div className="flex flex-col w-full max-w-7xl mx-auto px-4 sm:px-6 divide-y divide-[#EAE3D8] pb-6">
+          {wishlistProducts.map((product) => (
+            <div key={product.id} className="py-3.5 flex gap-3.5 w-full">
+              {/* Product Thumbnail */}
+              <Link
+                href={product.href}
+                className="relative rounded-[14px] shrink-0 size-[84px] sm:size-[92px] overflow-hidden bg-[#F5EFEB] border border-[#EAE3D8]/60 shadow-xs"
+              >
+                <Image
+                  src={product.imageUrl || "/assets/images/placeholder.png"}
+                  alt={product.name}
+                  fill
+                  className="object-cover rounded-[14px]"
+                />
+              </Link>
 
-          {/* List items matching Figma node 737:62 */}
-          <div className="flex flex-col w-full pb-6">
-            {wishlistProducts.map((product, index) => (
-              <div key={product.id} className="flex flex-col w-full bg-white md:bg-transparent">
-                <div className="flex gap-3 px-6 md:px-0 py-3 w-full relative">
-                  <Link href={product.href} className="relative rounded-[12px] shrink-0 size-[100px] overflow-hidden bg-[#f5f1ea]">
-                    <Image
-                      src={product.imageUrl || "/assets/images/placeholder.png"}
-                      alt={product.name}
-                      fill
-                      className="object-cover rounded-[12px]"
-                    />
+              {/* Product Details */}
+              <div className="flex flex-col flex-1 min-w-0 justify-between py-0.5">
+                {/* Title & Trash Button */}
+                <div className="flex items-start justify-between w-full gap-2">
+                  <Link
+                    href={product.href}
+                    className="font-semibold text-[#211E1A] text-[13.5px] sm:text-[14px] flex-1 leading-snug line-clamp-1 hover:text-primary-orange transition-colors"
+                  >
+                    {product.name}
                   </Link>
-                  <div className="flex flex-col flex-1 min-w-0 justify-between py-0.5">
-                    <div className="flex items-start justify-between w-full gap-2">
-                      <Link href={product.href} className="font-medium text-[#211e1a] text-[13px] flex-1 leading-[20px] line-clamp-2">
-                        {product.name}
-                      </Link>
-                      <button
-                        onClick={() => {
-                          removeFromWishlist(product.id);
-                          toast.info("Removed from Wishlist 🗑️", `${product.name} has been removed from your wishlist.`);
-                        }}
-                        className="size-5 flex items-center justify-center shrink-0 -mt-0.5 -mr-1 text-[#a89a85] hover:text-red-500 transition-colors cursor-pointer"
-                        aria-label="Remove item"
-                      >
-                        <TrashIcon />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between w-full mt-2">
-                      <div className="flex gap-1.5 items-baseline whitespace-nowrap">
-                        <span className="font-semibold text-[#211e1a] text-[15px]">
-                          ₹{product.currentPrice.toLocaleString("en-IN")}
-                        </span>
-                        {product.originalPrice && product.originalPrice > product.currentPrice && (
-                          <span className="font-normal text-[#a89a85] text-[12px] line-through">
-                            ₹{product.originalPrice.toLocaleString("en-IN")}
-                          </span>
-                        )}
-                      </div>
-
-                      {(() => {
-                        const cartItems = items.filter((i) => i.productId === product.id);
-                        const totalQty = cartItems.reduce((sum, i) => sum + i.quantity, 0);
-
-                        if (totalQty === 0) {
-                          return (
-                            <button
-                              onClick={() => handleAddToCart(product)}
-                              className="bg-[#ff5400] text-white px-3.5 py-1.5 rounded-full font-medium text-[12px] leading-none whitespace-nowrap hover:bg-[#e04d00] active:scale-[0.98] transition-all cursor-pointer"
-                            >
-                              Add to Cart
-                            </button>
-                          );
-                        }
-
-                        return (
-                          <div className="bg-white border-[#ff5400] border-[1.5px] border-solid flex h-[30px] items-center justify-between px-2.5 rounded-full gap-2 transition-colors">
-                            <button
-                              type="button"
-                              onClick={() => handleDecrement(product)}
-                              className="text-[#ff5400] text-[16px] font-bold size-5 flex items-center justify-center hover:bg-[#ff5400]/10 rounded-full transition-colors cursor-pointer select-none pb-0.5"
-                            >
-                              -
-                            </button>
-                            <span className="font-semibold text-[#ff5400] text-[13px] select-none min-w-[12px] text-center">
-                              {totalQty}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleIncrement(product)}
-                              className="text-[#ff5400] text-[16px] font-bold size-5 flex items-center justify-center hover:bg-[#ff5400]/10 rounded-full transition-colors cursor-pointer select-none pb-0.5"
-                            >
-                              +
-                            </button>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
+                  <button
+                    onClick={() => {
+                      removeFromWishlist(product.id);
+                      toast.info("Removed from Wishlist 🗑️", `${product.name} has been removed from your wishlist.`);
+                    }}
+                    className="size-6 flex items-center justify-center shrink-0 -mt-0.5 text-[#A8A29E] hover:text-red-500 transition-colors cursor-pointer"
+                    aria-label="Remove item"
+                  >
+                    <TrashIcon />
+                  </button>
                 </div>
-                {index < wishlistProducts.length - 1 && (
-                  <div className="h-px bg-[#e5e0da] w-full" />
+
+                {/* Stock Badge - position below title per Figma */}
+                {product.inventoryQuantity !== null && product.inventoryQuantity > 0 && product.inventoryQuantity <= (product.lowStockThreshold ?? 5) && (
+                  <div className="mt-0.5">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-[6px] text-[10.5px] sm:text-[11px] font-semibold bg-[#FFF5ED] text-primary-orange border border-[#FED7AA]/70">
+                      Only {product.inventoryQuantity} left
+                    </span>
+                  </div>
                 )}
+
+                {/* Price and Add to Cart Button */}
+                <div className="flex items-center justify-between w-full mt-1.5 sm:mt-2">
+                  <div className="flex gap-1.5 items-baseline whitespace-nowrap">
+                    <span className="font-bold text-[#211E1A] text-[14.5px] sm:text-[15px]">
+                      ₹{product.currentPrice.toLocaleString("en-IN")}
+                    </span>
+                    {product.originalPrice && product.originalPrice > product.currentPrice && (
+                      <span className="font-normal text-[#A8A29E] text-[12px] line-through">
+                        ₹{product.originalPrice.toLocaleString("en-IN")}
+                      </span>
+                    )}
+                  </div>
+
+                  {(() => {
+                    const cartItems = items.filter((i) => i.productId === product.id);
+                    const totalQty = cartItems.reduce((sum, i) => sum + i.quantity, 0);
+
+                    if (totalQty === 0) {
+                      return (
+                        <button
+                          onClick={() => handleAddToCart(product)}
+                          className="bg-primary-orange text-white px-3.5 py-1.5 rounded-full font-semibold text-[12px] leading-none whitespace-nowrap hover:bg-primary-orange-hover active:scale-[0.98] transition-all shadow-xs cursor-pointer"
+                        >
+                          Add to Cart
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <div className="bg-white border-primary-orange border-[1.5px] border-solid flex h-[28px] sm:h-[30px] items-center justify-between px-2.5 rounded-full gap-2 transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => handleDecrement(product)}
+                          className="text-primary-orange text-[15px] font-bold size-5 flex items-center justify-center hover:bg-primary-orange/10 rounded-full transition-colors cursor-pointer select-none pb-0.5"
+                        >
+                          -
+                        </button>
+                        <span className="font-semibold text-primary-orange text-[12.5px] select-none min-w-[12px] text-center">
+                          {totalQty}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleIncrement(product)}
+                          className="text-primary-orange text-[15px] font-bold size-5 flex items-center justify-center hover:bg-primary-orange/10 rounded-full transition-colors cursor-pointer select-none pb-0.5"
+                        >
+                          +
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
-            ))}
-          </div>
-        </>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Variant Selection Modal */}

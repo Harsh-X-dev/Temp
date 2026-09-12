@@ -14,8 +14,8 @@ export default async function CategoryGrid() {
   return (
     <section aria-label="Shop By Category" className="w-full">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 pt-6 px-4 md:px-6 lg:px-8">
-        <h2 className="text-[20px] font-bold text-text-primary">Shop by Category</h2>
+      <div className="flex items-center justify-between pb-3 pt-2 sm:pt-4 px-4 md:px-6 lg:px-8">
+        <h2 className="text-[18px] sm:text-[20px] font-bold text-text-primary tracking-tight">Shop by Category</h2>
         <ClientLink href="/collection/all" className="flex items-center gap-1 group">
           <span className="text-[13px] font-semibold text-primary-orange group-hover:underline">
             View all
@@ -42,8 +42,11 @@ export default async function CategoryGrid() {
           <ClientLink
             key={cat.id}
             href={`/collection/${cat.id}`}
-            className="group relative flex h-[200px] w-full flex-col justify-between overflow-hidden rounded-[12px] p-5 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            className="group relative flex h-[200px] w-full flex-col justify-between overflow-hidden rounded-[12px] bg-[#e5e0da] p-5 transition-transform hover:scale-[1.02] active:scale-[0.98]"
           >
+            {/* Underlying shimmer */}
+            <div className="absolute inset-0 animate-shimmer" />
+
             {/* Background Image & Overlay */}
             {cat.icon && (
               <Image

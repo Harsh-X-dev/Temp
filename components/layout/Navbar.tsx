@@ -3,7 +3,7 @@
 import { useHasMounted } from "@/hooks/useHasMounted";
 import Image from "next/image";
 import { useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { assets } from "@/lib/assets";
 import { navItems } from "@/lib/navigation";
 import Container from "./Container";
@@ -76,6 +76,7 @@ function NavAuthActions() {
 
 export default function Navbar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const mounted = useHasMounted();
   const wishlistIds = useWishlistStore((state) => state.wishlistIds);
@@ -95,6 +96,7 @@ export default function Navbar() {
 
   const wishlistCount = mounted ? wishlistIds.length : 0;
   const isSearchPage = pathname?.startsWith('/search');
+  const hasSearchQuery = Boolean(searchParams?.get('q'));
   const isHomePage = pathname === '/';
 
   if (
@@ -104,11 +106,37 @@ export default function Navbar() {
     pathname === '/profile/reviews' ||
     pathname === '/profile/edit' ||
     pathname?.startsWith('/checkout') ||
-    pathname === '/search'
+    pathname?.startsWith('/purpose') ||
+    pathname?.startsWith('/search')
   ) return null;
 
   const isMobileHiddenRoute = pathname?.startsWith('/orders');
   const isWishlistPage = pathname === '/wishlist';
+
+  if (!mounted) {
+    return (
+      <header className={`sticky top-0 z-50 w-full max-w-full overflow-hidden ${isMobileHiddenRoute ? 'hidden lg:block' : ''}`}>
+        {isHomePage && (
+          <div className="w-full max-w-full h-8 bg-primary-orange animate-shimmer" />
+        )}
+        <div className="w-full max-w-full bg-white border-b border-[#e5e0da]/60">
+          <Container className="relative flex items-center justify-between gap-3 md:gap-4 h-[56px] lg:h-[72px]">
+            {/* Left balance spacer for mobile centering */}
+            <div className="w-[53px] lg:hidden" />
+
+            {/* Logo Shimmer Placeholder (Figma Node 1484:94) */}
+            <div className="h-[34px] lg:h-[38px] w-[140px] sm:w-[162px] rounded-[8px] animate-shimmer" />
+
+            {/* Right Action Icons Shimmer (Figma Node 1484:95) */}
+            <div className="flex items-center gap-3 md:gap-4">
+              <div className="size-[24px] rounded-full animate-shimmer" />
+              <div className="size-[20px] rounded-full animate-shimmer" />
+            </div>
+          </Container>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <>
@@ -118,8 +146,8 @@ export default function Navbar() {
             <AnnouncementBar />
           </div>
         )}
-        <div className={`w-full max-w-full bg-white ${isSearchPage || isWishlistPage ? 'border-b-0 shadow-none' : 'border-b border-border-strong shadow-xs'}`}>
-          <Container className={`relative flex items-center justify-between gap-3 md:gap-4 ${isSearchPage ? 'h-[46px] lg:h-[64px]' : 'h-[56px] lg:h-[72px]'}`}>
+        <div className={`w-full max-w-full bg-white ${isSearchPage || isWishlistPage ? 'border-b border-[#e5e0da]/60 shadow-none' : 'border-b border-border-strong shadow-xs'}`}>
+          <Container className="relative flex items-center justify-between gap-3 md:gap-4 h-[56px] lg:h-[72px]">
             {/* Logo — Centered on mobile, left-aligned on desktop */}
             <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center lg:static lg:translate-x-0">
               <ClientLink href="/" className="flex shrink-0 items-center">

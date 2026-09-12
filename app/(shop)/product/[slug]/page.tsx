@@ -39,7 +39,7 @@ const getCachedProductDetail = unstable_cache(
         product_materials ( materials ( name ) ),
         origins ( name ),
         mukhi_types ( special_name, mukhi_count, mythology, benefits, planets ( name ) ),
-        product_purposes ( purposes ( name ) ),
+        product_purposes ( purposes ( title, slug ) ),
         product_moolanks ( moolank_number ),
         product_planets ( planets ( name ) ),
         product_temples ( temples ( name, city, state, description ) ),
@@ -373,7 +373,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     material: resolvedMaterial || undefined,
     origin: pData.origins?.name || undefined,
     mukhiType: mukhiTypeName,
-    purpose: (pData.product_purposes || []).map((p: any) => p.purposes?.name).filter(Boolean).join(', ') || undefined,
+    purpose: (pData.product_purposes || []).map((p: any) => p.purposes?.title || p.purposes?.name).filter(Boolean).join(', ') || undefined,
     bestFor: pData.best_for || undefined,
     rulingPlanet:
       (pData.product_planets || []).map((p: any) => p.planets?.name).filter(Boolean).join(', ') ||

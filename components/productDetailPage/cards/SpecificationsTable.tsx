@@ -1,3 +1,4 @@
+import React from 'react';
 import { ProductSpecification } from '@/types/product.types';
 
 interface SpecificationsTableProps {
@@ -8,26 +9,30 @@ export default function SpecificationsTable({ specifications }: SpecificationsTa
   if (!specifications || specifications.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-[12px] items-start w-full relative shrink-0">
+    <div className="flex flex-col gap-3 items-start w-full relative shrink-0">
       <h2 className="font-bold leading-[24px] text-text-primary text-[18px]">
         Specifications
       </h2>
-      <div className="flex flex-col items-start w-full border border-border-strong rounded-[12px] overflow-hidden">
+
+      <div className="w-full rounded-[16px] border border-[#E7E2D8] bg-white overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.02)] divide-y divide-[#EFEAE2]">
         {specifications.map((spec, index) => {
           const isEven = index % 2 === 0;
           return (
-            <div 
-              key={spec.id} 
-              className={`border-border-strong border-b last:border-b-0 border-solid flex items-center justify-between px-[14px] py-[12px] w-full ${
-                isEven ? 'bg-white' : 'bg-surface-subtle'
+            <div
+              key={spec.id || index}
+              className={`flex items-start gap-4 sm:gap-6 px-4 py-3.5 sm:px-5 transition-colors ${
+                isEven ? 'bg-white' : 'bg-[#FAF7F2]/70'
               }`}
             >
-              <p className="font-normal leading-[16px] text-text-secondary text-[12px]">
+              {/* Specification Key / Label */}
+              <span className="w-[110px] sm:w-[150px] shrink-0 text-[12.5px] sm:text-[13px] font-medium text-[#78716C] leading-relaxed">
                 {spec.specKey}
-              </p>
-              <p className="font-semibold leading-[20px] text-text-primary text-[14px] text-right">
+              </span>
+
+              {/* Specification Value */}
+              <span className="flex-1 text-[13.5px] sm:text-[14px] font-semibold text-[#1C1917] leading-relaxed break-words text-left">
                 {spec.specValue}
-              </p>
+              </span>
             </div>
           );
         })}

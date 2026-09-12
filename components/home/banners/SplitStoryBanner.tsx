@@ -9,7 +9,10 @@ export default async function SplitStoryBanner() {
 
   return (
     <section aria-label="Split Story Banner" className="w-full max-w-full overflow-hidden">
-      <div className="relative flex h-[280px] sm:h-[320px] md:h-[380px] lg:h-[420px] w-full flex-col justify-between overflow-hidden p-[24px] sm:p-8 md:p-10 lg:p-12">
+      <div className="relative flex h-[280px] sm:h-[320px] md:h-[380px] lg:h-[420px] w-full flex-col justify-between overflow-hidden bg-[#e5e0da] p-[24px] sm:p-8 md:p-10 lg:p-12">
+        {/* Warm shimmer base */}
+        <div className="absolute inset-0 animate-shimmer" />
+
         {/* Background image */}
         <Image
           src={banner?.image || "/assets/images/placeholder.png"}

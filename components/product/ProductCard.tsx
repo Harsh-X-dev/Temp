@@ -8,7 +8,11 @@ import ProductFooter from "./ProductFooter";
 import { logProductEngagementClick } from "@/services/search.client.service";
 import { BaseProductComponentProps } from "@/types/product.types";
 
-export default function ProductCard({ product, variant = "shopping" }: BaseProductComponentProps) {
+export interface ProductCardProps extends BaseProductComponentProps {
+  priority?: boolean;
+}
+
+export default function ProductCard({ product, variant = "shopping", priority = false }: ProductCardProps) {
   return (
     <div className="group flex min-w-0 flex-1 flex-col w-full">
       <ClientLink 
@@ -17,7 +21,7 @@ export default function ProductCard({ product, variant = "shopping" }: BaseProdu
         onClick={() => logProductEngagementClick(product.id, product.name)}
         className="flex min-w-0 flex-1 flex-col focus-visible:outline-none"
       >
-        <ProductImage product={product} variant={variant} />
+        <ProductImage product={product} variant={variant} priority={priority} />
         
         <div className="flex flex-col mt-2.5 gap-1 w-full">
           <ProductInfo product={product} variant={variant} />

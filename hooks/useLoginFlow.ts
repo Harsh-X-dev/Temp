@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isValidPhone } from "@/lib/validators";
 import { isValidOtp } from "@/lib/validators";
@@ -74,7 +74,15 @@ export function useLoginFlow() {
   const [otp, setOtp] = useState<string[]>(emptyOtp);
   const [verificationId, setVerificationId] = useState("");
   const [countdown, setCountdown] = useState<number>(0);
-  /** True while a resend request is in-flight — prevents duplicate clicks. */
+  /**
+   * Ref-based in-flight guard for handleResend.
+   * Using a ref (not useState) means the guard always reads the current value
+   * without creating a stale closure in useCallback, and without adding
+   * isResending to the dep array (which would recreate the callback on every
+   * state flip and cause the alternating-send bug).
+   */
+  const isResendingRef = useRef(false);
+  /** UI-only state — drives the disabled appearance of the resend button. */
   const [isResending, setIsResending] = useState(false);
 
   // ── Auth store ────────────────────────────────────────────────────────────
@@ -239,10 +247,13 @@ export function useLoginFlow() {
    *   5. On error:   show inline + toast error, do NOT start countdown.
    */
   const handleResend = useCallback(async () => {
-    if (isResending) return;
+    // Use the ref for the guard — it always reflects the current in-flight
+    // state without being a stale closure value from the dep array.
+    if (isResendingRef.current) return;
 
+    isResendingRef.current = true;
     setError(null);
-    setIsResending(true);
+    setIsResending(true); // UI only
 
     try {
       const response = await sendOtp(phone);
@@ -275,9 +286,12 @@ export function useLoginFlow() {
       // For non-rate-limit errors, do NOT start a countdown — the resend did
       // not succeed, so there is nothing to count down from.
     } finally {
-      setIsResending(false);
+      isResendingRef.current = false;
+      setIsResending(false); // UI only
     }
-  }, [phone, isResending]);
+    // Dep array contains only phone — stable for the entire OTP step.
+    // isResending is intentionally excluded; the ref handles the guard.
+  }, [phone]);
 
   // ── Public API ────────────────────────────────────────────────────────────
 

@@ -8,7 +8,8 @@ import type { Address, AddressType } from '@/components/account/types';
 import BackButton from '@/components/ui/buttons/BackButton';
 import Select from '@/components/ui/inputs/Select';
 import FormField from '@/components/ui/inputs/FormField';
-import { INDIAN_STATES, PINCODE_PATTERN } from '@/lib/constants/india';
+import { INDIAN_STATES } from '@/lib/constants/india';
+import { validateAddressForm } from '@/lib/validators';
 
 interface AddressFormSheetProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ const INITIAL_FORM: AddressFormData = {
   line2: '',
   city: '',
   state: '',
+  country: 'India',
   addressType: 'home',
 };
 
@@ -43,6 +45,7 @@ const ADDRESS_TYPES: { id: AddressType; label: string }[] = [
 const FIELD_ORDER: (keyof AddressFormData)[] = [
   'fullName',
   'phone',
+  'email',
   'pincode',
   'line1',
   'line2',
@@ -50,33 +53,9 @@ const FIELD_ORDER: (keyof AddressFormData)[] = [
   'state',
 ];
 
-/** Pure validator */
+/** Pure validator delegated to centralized validators */
 function computeErrors(form: AddressFormData): FormErrors {
-  const errors: FormErrors = {};
-
-  if (!form.fullName || !form.fullName.trim()) {
-    errors.fullName = 'Full Name is required';
-  }
-
-  const phone = form.phone?.trim() || '';
-  if (!phone) {
-    errors.phone = 'Phone Number is required';
-  } else {
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
-      errors.phone = 'Enter a valid 10-digit phone number';
-    }
-  }
-
-  const pincode = form.pincode.trim();
-  if (!pincode) errors.pincode = 'Pincode is required';
-  else if (!PINCODE_PATTERN.test(pincode)) errors.pincode = 'Enter a valid 6-digit pincode';
-
-  if (!form.line1.trim()) errors.line1 = 'House / Flat / Floor is required';
-  if (!form.city.trim()) errors.city = 'City is required';
-  if (!form.state.trim()) errors.state = 'State is required';
-
-  return errors;
+  return validateAddressForm(form).errors;
 }
 
 function toFormData(address: Address): AddressFormData {
@@ -89,6 +68,7 @@ function toFormData(address: Address): AddressFormData {
     line2: address.line2 || '',
     city: address.city || '',
     state: address.state || '',
+    country: address.country || 'India',
     addressType: address.addressType || 'home',
   };
 }
@@ -194,6 +174,7 @@ export default function AddressFormSheet({
         line2: form.line2?.trim() || undefined,
         city: form.city.trim(),
         state: form.state.trim(),
+        country: form.country?.trim() || 'India',
         isDefault,
       });
     } catch (err) {
@@ -280,7 +261,7 @@ export default function AddressFormSheet({
                   name="phone"
                   type="tel"
                   autoComplete="tel"
-                  placeholder="+91 98765 43210"
+                  placeholder="9876543210"
                   value={form.phone || ''}
                   onChange={(e) => updateField('phone', e.target.value)}
                   className={inputBaseClasses(Boolean(errors.phone))}
@@ -319,12 +300,9 @@ export default function AddressFormSheet({
                   type="text"
                   inputMode="numeric"
                   autoComplete="postal-code"
-                  maxLength={6}
                   placeholder="Enter pincode"
                   value={form.pincode}
-                  onChange={(e) =>
-                    updateField('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))
-                  }
+                  onChange={(e) => updateField('pincode', e.target.value)}
                   aria-invalid={errors.pincode ? true : undefined}
                   aria-describedby={errors.pincode ? errorId('pincode') : undefined}
                   className={inputBaseClasses(Boolean(errors.pincode))}

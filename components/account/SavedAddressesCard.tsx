@@ -27,12 +27,29 @@ export default function SavedAddressesCard(_props: SavedAddressesCardProps) {
   const setAddresses = useAuthStore((state) => state.setAddresses);
 
   const addrForm = useAddressForm({
-    onSaved: async () => {
-      // Re-fetch the full list after create or edit so the UI reflects the
-      // server state (handles isDefault re-ordering, etc.)
-      const supabase = createSupabaseBrowserClient();
-      const updated = await fetchAddresses(supabase);
-      setAddresses(updated);
+    onSaved: (address: Address) => {
+      // Optimistic in-place update — update Zustand store immediately so the UI
+      // displays the new/edited address in 0ms without waiting for the network round-trip.
+      setAddresses((prev) => {
+        const list = Array.isArray(prev) ? prev : [];
+        let updated = list;
+        if (address.isDefault) {
+          updated = updated.map((a) => ({ ...a, isDefault: false }));
+        }
+        const existsIndex = updated.findIndex(
+          (a) =>
+            a.id === address.id ||
+            (a.id.startsWith("addr_") &&
+              a.line1 === address.line1 &&
+              a.pincode === address.pincode)
+        );
+        if (existsIndex >= 0) {
+          const next = [...updated];
+          next[existsIndex] = address;
+          return next;
+        }
+        return [address, ...updated];
+      });
     },
   });
 

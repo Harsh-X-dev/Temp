@@ -6,6 +6,7 @@ import { saveAddress, updateAddress } from "@/services/profile.service";
 import type { Address } from "@/components/account/types";
 import type { AddressFormData } from "@/types/checkout.types";
 import { toast } from "@/lib/toast";
+import { validateAddressForm } from "@/lib/validators";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -94,23 +95,44 @@ export function useAddressForm({
   }
 
   async function submit(formData: AddressFormData): Promise<void> {
+    const { isValid, errors } = validateAddressForm(formData);
+    if (!isValid) {
+      console.warn("[useAddressForm] Submit called with invalid form data:", errors);
+      return;
+    }
+
+    const normalizedData: AddressFormData = {
+      ...formData,
+      fullName: formData.fullName?.trim() || undefined,
+      phone: formData.phone?.trim() || undefined,
+      email: formData.email?.trim() || undefined,
+      line1: formData.line1.trim(),
+      line2: formData.line2?.trim() || undefined,
+      city: formData.city.trim(),
+      state: formData.state.trim(),
+      pincode: formData.pincode.trim(),
+      country: formData.country?.trim() || "India",
+      addressType: formData.addressType,
+      isDefault: formData.isDefault,
+    };
+
     // 1. Construct optimistic address immediately (0ms delay)
     const optimisticAddress: Address = {
       id:
         mode === "edit" && editingAddress
           ? editingAddress.id
           : `addr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      fullName: formData.fullName?.trim() || editingAddress?.fullName || "Customer",
-      phone: formData.phone?.trim() || editingAddress?.phone || "",
-      email: formData.email?.trim() || editingAddress?.email,
-      line1: formData.line1.trim(),
-      line2: formData.line2?.trim(),
-      city: formData.city.trim(),
-      state: formData.state.trim(),
-      pincode: formData.pincode.trim(),
-      country: formData.country?.trim() || "India",
-      addressType: formData.addressType,
-      isDefault: formData.isDefault ?? (mode === "create" ? true : false),
+      fullName: normalizedData.fullName || editingAddress?.fullName || "Customer",
+      phone: normalizedData.phone || editingAddress?.phone || "",
+      email: normalizedData.email || editingAddress?.email,
+      line1: normalizedData.line1,
+      line2: normalizedData.line2,
+      city: normalizedData.city,
+      state: normalizedData.state,
+      pincode: normalizedData.pincode,
+      country: normalizedData.country || "India",
+      addressType: normalizedData.addressType,
+      isDefault: normalizedData.isDefault ?? (mode === "create" ? true : false),
     };
 
     // 2. Immediately close sheet, apply optimistic address, and show toast
@@ -131,23 +153,23 @@ export function useAddressForm({
 
         if (mode === "create") {
           const fn = createFn ?? defaultCreate;
-          const saved = await fn(supabase, formData);
+          const saved = await fn(supabase, normalizedData);
           if (saved) {
             onSaved(saved);
           }
         } else if (mode === "edit" && editingAddress) {
           const saved = await updateAddress(supabase, editingAddress.id, {
-            fullName: formData.fullName || undefined,
-            phone: formData.phone || undefined,
-            email: formData.email || undefined,
-            line1: formData.line1,
-            line2: formData.line2 || undefined,
-            city: formData.city,
-            state: formData.state,
-            pincode: formData.pincode,
-            addressType: formData.addressType,
-            country: formData.country || "India",
-            isDefault: formData.isDefault,
+            fullName: normalizedData.fullName || undefined,
+            phone: normalizedData.phone || undefined,
+            email: normalizedData.email || undefined,
+            line1: normalizedData.line1,
+            line2: normalizedData.line2 || undefined,
+            city: normalizedData.city,
+            state: normalizedData.state,
+            pincode: normalizedData.pincode,
+            addressType: normalizedData.addressType,
+            country: normalizedData.country || "India",
+            isDefault: normalizedData.isDefault,
           });
           if (saved) {
             onSaved(saved);

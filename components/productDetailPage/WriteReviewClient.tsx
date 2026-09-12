@@ -97,7 +97,7 @@ export default function WriteReviewClient({
   // Require login, purchase, and unreviewed status
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      toast.info('Login Required 🔒', 'Please log in to write a review.');
+      toast.info('Login Required 🔒', 'Please log in to write a review.', { duration: 3000 });
       router.replace(`/login?redirectTo=${encodeURIComponent(`/product/${product.slug}/write-review`)}`);
       return;
     }
@@ -106,9 +106,9 @@ export default function WriteReviewClient({
       checkCanUserReviewProduct(supabase, product.id, user.id).then((res) => {
         if (!res.eligible) {
           if (res.reason === 'NOT_PURCHASED') {
-            toast.error('Purchase Required 🛍️', 'Please purchase the item before you give a review.', { duration: 6000 });
+            toast.error('Purchase Required 🛍️', 'Please purchase the item before you give a review.', { duration: 3000 });
           } else if (res.reason === 'ALREADY_REVIEWED') {
-            toast.error('Already Reviewed 📝', 'You have already submitted a review for this product.', { duration: 6000 });
+            toast.error('Already Reviewed 📝', 'You have already submitted a review for this product.', { duration: 3000 });
           }
           router.replace(`/product/${product.slug}`);
         }

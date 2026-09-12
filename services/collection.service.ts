@@ -78,12 +78,13 @@ export const getActiveCollections = cache(async function getActiveCollections():
 export const getCollectionBySlug = cache(async function getCollectionBySlug(
   slug: string,
 ): Promise<CategoryConfig | undefined> {
-  if (slug === "all") {
+  const normalizedSlug = (slug || "").toLowerCase().trim();
+  if (normalizedSlug === "all") {
     return ALL_CATEGORY;
   }
 
   const all = await getActiveCollections();
-  return all.find((c) => c.id === slug);
+  return all.find((c) => (c.id || "").toLowerCase() === normalizedSlug);
 });
 
 /**

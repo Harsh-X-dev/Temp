@@ -77,20 +77,20 @@ export default function ReviewsSection({
   const handleWriteReviewClick = (e: React.MouseEvent) => {
     if (!authLoading && !isAuthenticated) {
       e.preventDefault();
-      toast.info("Please Login 🔒", "You need to be logged in to write a review.", { duration: 5000 });
+      toast.info("Please Login 🔒", "You need to be logged in to write a review.", { duration: 3000 });
       router.push(`/login?redirectTo=${encodeURIComponent(`/product/${productSlug}/write-review`)}`);
       return;
     }
 
     if (eligibility.reason === 'NOT_PURCHASED') {
       e.preventDefault();
-      toast.error("Purchase Required 🛍️", "Please purchase the item before you give a review.", { duration: 6000 });
+      toast.error("Purchase Required 🛍️", "Please purchase the item before you give a review.", { duration: 3000 });
       return;
     }
 
     if (eligibility.reason === 'ALREADY_REVIEWED') {
       e.preventDefault();
-      toast.error("Already Reviewed 📝", "You have already submitted a review for this product.", { duration: 6000 });
+      toast.error("Already Reviewed 📝", "You have already submitted a review for this product.", { duration: 3000 });
       return;
     }
 
@@ -153,18 +153,18 @@ export default function ReviewsSection({
         Customer Reviews
       </h2>
 
-      <div className="bg-surface-subtle border border-border-strong border-solid flex flex-col items-start rounded-[12px] w-full">
-        <div className="flex flex-col gap-[16px] w-full p-[16px]">
+      <div className="bg-[#FAF7F2] border border-[#E7E2D8] flex flex-col items-start rounded-[16px] w-full shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+        <div className="flex flex-col gap-[16px] w-full p-[16px] sm:p-[20px]">
           <div className="flex items-center justify-between w-full">
             <div className="flex gap-[8px] items-baseline">
               <p className="font-bold leading-[32px] text-text-primary text-[28px]">
-                {rating.toFixed(1)}
+                {rating > 0 ? rating.toFixed(1) : '0.0'}
               </p>
               <p className="font-normal leading-[16px] text-text-muted text-[14px]">
                 out of 5
               </p>
             </div>
-            <div className="flex flex-col gap-[2px] items-end">
+            <div className="flex flex-col gap-[4px] items-end">
               {renderStars(Math.round(rating))}
               <p className="font-normal leading-[16px] text-text-muted text-[12px]">
                 {reviewCount} {reviewCount === 1 ? 'review' : 'reviews'}
@@ -172,29 +172,29 @@ export default function ReviewsSection({
             </div>
           </div>
 
-          <div className="h-px w-full bg-border-strong"></div>
+          <div className="h-px w-full bg-[#E7E2D8]"></div>
 
-          <div className="flex flex-col gap-[6px] items-start w-full">
+          <div className="flex flex-col gap-[8px] items-start w-full">
             {histogram.map((bar) => (
-              <div key={bar.stars} className="flex gap-[8px] items-center w-full">
-                <p className="font-medium leading-[16px] text-text-secondary text-[12px] w-[24px]">
+              <div key={bar.stars} className="flex gap-[10px] items-center w-full">
+                <span className="font-medium leading-[16px] text-[#78716C] text-[12.5px] w-[26px] shrink-0">
                   {bar.stars}★
-                </p>
-                <div className="bg-border-strong flex h-[6px] rounded-[3px] w-[140px] md:flex-1 overflow-hidden">
+                </span>
+                <div className="bg-[#E7E2D8] flex-1 h-[7px] rounded-full overflow-hidden">
                   <div
-                    className="bg-primary-orange h-full rounded-[3px]"
+                    className="bg-primary-orange h-full rounded-full transition-all duration-300"
                     style={{ width: `${bar.percentage}%` }}
                   ></div>
                 </div>
-                <p className="font-normal leading-[16px] text-text-muted text-[12px] text-right w-[36px]">
+                <span className="font-medium leading-[16px] text-[#A8A29E] text-[12px] text-right w-[34px] shrink-0">
                   {bar.percentage}%
-                </p>
+                </span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="w-full px-[16px] pb-[16px]">
+        <div className="w-full px-[16px] sm:px-[20px] pb-[16px] sm:pb-[20px]">
           <Link 
             href={
               eligibility.eligible && eligibility.orderId
@@ -202,7 +202,7 @@ export default function ReviewsSection({
                 : `/product/${productSlug}/write-review`
             } 
             onClick={handleWriteReviewClick}
-            className="w-full py-[10px] rounded-[999px] border border-primary-orange text-primary-orange font-semibold text-[14px] flex items-center justify-center bg-white transition-colors hover:bg-primary-orange/5 cursor-pointer"
+            className="w-full py-[11px] rounded-full border border-primary-orange text-primary-orange font-semibold text-[14px] flex items-center justify-center bg-white transition-all hover:bg-primary-orange hover:text-white shadow-xs cursor-pointer"
           >
             Write a Review
           </Link>

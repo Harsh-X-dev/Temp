@@ -18,8 +18,8 @@ export default async function TestimonialsSection() {
 
   return (
     <section aria-labelledby="testimonials-heading" className="w-full bg-transparent pb-2 overflow-hidden">
-      <div className="flex items-center justify-start pb-3 px-4 md:px-6 lg:px-8 max-w-[1920px] mx-auto w-full">
-        <h2 id="testimonials-heading" className="text-[20px] font-bold text-text-primary">
+      <div className="flex items-center justify-start pb-2 px-4 md:px-6 lg:px-8 max-w-[1920px] mx-auto w-full">
+        <h2 id="testimonials-heading" className="text-[16px] sm:text-[18px] font-bold text-text-primary tracking-tight">
           What are they saying?
         </h2>
       </div>

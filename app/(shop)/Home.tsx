@@ -1,4 +1,5 @@
 import BannerCarousel from "@/components/home/banners/BannerCarousel";
+import ShopByPurpose from "@/components/home/ShopByPurpose";
 import CategoryGrid from "@/components/home/CategoryGrid";
 import BestsellersSection from "@/components/home/sections/BestsellersSection";
 import SplitStoryBanner from "@/components/home/banners/SplitStoryBanner";
@@ -19,8 +20,13 @@ export default function Home() {
         <BannerCarousel />
       </div>
 
-      {/* 2. Shop by Category */}
-      <div className="mx-auto mt-6 w-full max-w-[1920px] min-w-0">
+      {/* 2. Shop by Purpose */}
+      <div className="mx-auto mt-4 sm:mt-6 w-full max-w-[1920px] min-w-0">
+        <ShopByPurpose />
+      </div>
+
+      {/* 3. Shop by Category */}
+      <div className="mx-auto mt-2 sm:mt-4 w-full max-w-[1920px] min-w-0">
         <CategoryGrid />
       </div>
 
@@ -34,13 +40,13 @@ export default function Home() {
         <SplitStoryBanner />
       </div>
 
-      {/* 5. Two-up Story Grid */}
-      <div className="mx-auto mt-8 w-full max-w-[1920px] min-w-0">
+      {/* 5. Story Grid */}
+      <div className="mx-auto mt-3 sm:mt-4 w-full max-w-[1920px] min-w-0">
         <TwoUpStoryGrid />
       </div>
 
       {/* 6. Testimonials Section */}
-      <div className="mx-auto mt-8 w-full max-w-[1920px] min-w-0 overflow-hidden">
+      <div className="mx-auto mt-3 sm:mt-5 w-full max-w-[1920px] min-w-0 overflow-hidden">
         <TestimonialsSection />
       </div>
 
