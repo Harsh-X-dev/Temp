@@ -213,8 +213,9 @@ export default function WriteReviewClient({
       formData.append('heading', title.trim() || 'Review');
       formData.append('comment', review.trim());
 
-      if (user?.id) {
-        formData.append('user_id', user.id);
+      const effectiveUserId = user?.id || profile?.id;
+      if (effectiveUserId) {
+        formData.append('user_id', effectiveUserId);
       }
       const effectiveName =
         profile?.fullName ||
