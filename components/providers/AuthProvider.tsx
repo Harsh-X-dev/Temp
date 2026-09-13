@@ -66,6 +66,13 @@ export default function AuthProvider({
           data: { session },
         } = await supabase.auth.getSession();
 
+        // If an active login transition (useLoginFlow) has started ownership,
+        // yield completely: do NOT call loadUserData(), do NOT overwrite profile,
+        // and do NOT set initialized=true prematurely.
+        if (useAuthStore.getState().loginInProgress) {
+          return;
+        }
+
         if (session?.user) {
           setAuth(session.user, session);
           await loadUserData(session.user.id);
@@ -73,10 +80,14 @@ export default function AuthProvider({
           clear();
         }
       } catch {
-        clear();
+        if (!useAuthStore.getState().loginInProgress) {
+          clear();
+        }
       } finally {
-        setLoading(false);
-        setInitialized(true);
+        if (!useAuthStore.getState().loginInProgress) {
+          setLoading(false);
+          setInitialized(true);
+        }
       }
     }
 
@@ -90,7 +101,7 @@ export default function AuthProvider({
         if (session?.user) {
           setAuth(session.user, session);
           // Do not race with useLoginFlow when it is actively establishing auth and resolving profile
-          if (!useAuthStore.getState().loading) {
+          if (!useAuthStore.getState().loginInProgress) {
             await loadUserData(session.user.id);
           } else if (session.user.id) {
             useWishlistStore.getState().loadUserWishlist(session.user.id).catch((err) => {

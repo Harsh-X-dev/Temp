@@ -165,7 +165,13 @@ export async function fetchProfileWithAddresses(
     .eq("id", user.id)
     .maybeSingle();
 
-  if (error || !data) return { profile: null, addresses: [] };
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return { profile: null, addresses: [] };
+  }
 
   return {
     profile: mapRowToProfile(data as Record<string, unknown>, user.email),

@@ -43,6 +43,8 @@ interface UseAuthReturn {
   loading: boolean;
   /** True after the first auth check completes (success or failure). */
   initialized: boolean;
+  /** True when an explicit OTP login transition is actively in progress. */
+  loginInProgress: boolean;
   /**
    * Sign out the user: calls Supabase signOut, clears all storage and cookies,
    * resets in-memory stores, and redirects to /login.
@@ -199,6 +201,7 @@ export function useAuth(): UseAuthReturn {
     isAuthenticated,
     loading,
     initialized,
+    loginInProgress,
     clear,
     setProfile,
     setAddresses,
@@ -239,11 +242,15 @@ export function useAuth(): UseAuthReturn {
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    const supabase = createSupabaseBrowserClient();
-    const { profile: refreshedProfile, addresses: refreshedAddresses } =
-      await fetchProfileWithAddresses(supabase);
-    setProfile(refreshedProfile);
-    setAddresses(refreshedAddresses);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { profile: refreshedProfile, addresses: refreshedAddresses } =
+        await fetchProfileWithAddresses(supabase);
+      setProfile(refreshedProfile);
+      setAddresses(refreshedAddresses);
+    } catch (err) {
+      console.error("[useAuth] Failed to refresh profile:", err);
+    }
   }, [setProfile, setAddresses]);
 
   const logout = useCallback(async () => {
@@ -292,6 +299,7 @@ export function useAuth(): UseAuthReturn {
     isAuthenticated,
     loading,
     initialized,
+    loginInProgress,
     logout,
     updateProfile,
     uploadAvatar,

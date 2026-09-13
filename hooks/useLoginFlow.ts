@@ -86,8 +86,14 @@ export function useLoginFlow() {
   const [isResending, setIsResending] = useState(false);
 
   // ── Auth store ────────────────────────────────────────────────────────────
-  const { setAuth, setProfile, setAddresses, setLoading: setStoreLoading, setInitialized } =
-    useAuthStore();
+  const {
+    setAuth,
+    setProfile,
+    setAddresses,
+    setLoading: setStoreLoading,
+    setInitialized,
+    setLoginInProgress,
+  } = useAuthStore();
 
   // ── Countdown timer — decrements every second until zero ─────────────────
   useEffect(() => {
@@ -162,6 +168,8 @@ export function useLoginFlow() {
     }
 
     setLoading(true);
+    setLoginInProgress(true);
+
     try {
       // ── Step 1: Verify OTP with backend ──────────────────────────────────
       const response = await verifyOtp(phone, otp.join(""), verificationId);
@@ -181,9 +189,6 @@ export function useLoginFlow() {
       }
 
       // ── Step 2: Establish Supabase session ───────────────────────────────
-      // Mark store loading to ensure AuthProvider's SIGNED_IN event does not race
-      setStoreLoading(true);
-
       const supabase = createSupabaseBrowserClient();
       const { data: sessionData, error: sessionError } =
         await supabase.auth.setSession({
@@ -192,7 +197,6 @@ export function useLoginFlow() {
         });
 
       if (sessionError || !sessionData.session || !sessionData.user) {
-        setStoreLoading(false);
         setError("Failed to establish session. Please try again.");
         toast.error("Session error", "Failed to establish session. Please try again.");
         return;
@@ -254,6 +258,7 @@ export function useLoginFlow() {
 
         case "error": {
           setStoreLoading(false);
+          setInitialized(true);
           setError("Failed to load profile. Please try again.");
           toast.error("Profile Error", "Could not load user profile. Please try again.");
           break;
@@ -266,6 +271,11 @@ export function useLoginFlow() {
       toast.error(result.toastTitle, result.toastDescription);
     } finally {
       setLoading(false);
+      setLoginInProgress(false);
+      if (!useAuthStore.getState().initialized) {
+        setStoreLoading(false);
+        setInitialized(true);
+      }
     }
   }
 

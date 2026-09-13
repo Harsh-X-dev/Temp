@@ -27,6 +27,8 @@ interface AuthState {
   loading: boolean;
   /** True after the first auth check completes (success or failure). */
   initialized: boolean;
+  /** True when an explicit OTP login transition is actively in progress. */
+  loginInProgress: boolean;
 
   // ── Actions ────────────────────────────────────────────────────────────
   /** Set user + session together after successful authentication. */
@@ -39,6 +41,7 @@ interface AuthState {
   clear: () => void;
   setLoading: (loading: boolean) => void;
   setInitialized: (initialized: boolean) => void;
+  setLoginInProgress: (loginInProgress: boolean) => void;
 }
 
 const initialState = {
@@ -49,6 +52,7 @@ const initialState = {
   isAuthenticated: false,
   loading: true,
   initialized: false,
+  loginInProgress: false,
 };
 
 export const useAuthStore = create<AuthState>()((set) => ({
@@ -75,9 +79,12 @@ export const useAuthStore = create<AuthState>()((set) => ({
       profile: null,
       addresses: [],
       isAuthenticated: false,
+      loginInProgress: false,
     }),
 
   setLoading: (loading) => set({ loading }),
 
   setInitialized: (initialized) => set({ initialized }),
+
+  setLoginInProgress: (loginInProgress) => set({ loginInProgress }),
 }));
