@@ -45,7 +45,7 @@ const getCachedActiveCollections = unstable_cache(
     return data;
   },
   ["active-collections-list"],
-  { revalidate: 60, tags: ["collections"] }
+  { revalidate: 3600, tags: ["collections"] }
 );
 
 /**
@@ -72,8 +72,7 @@ export const getActiveCollections = cache(async function getActiveCollections():
 
 /**
  * Fetch a single collection by its URL slug.
- * Returns `undefined` for unknown or inactive slugs — callers should
- * invoke `notFound()` in that case.
+ * Returns CategoryConfig for the matching slug, with graceful fallback.
  */
 export const getCollectionBySlug = cache(async function getCollectionBySlug(
   slug: string,
@@ -84,7 +83,24 @@ export const getCollectionBySlug = cache(async function getCollectionBySlug(
   }
 
   const all = await getActiveCollections();
-  return all.find((c) => (c.id || "").toLowerCase() === normalizedSlug);
+  const match = all.find(
+    (c) =>
+      (c.id || "").toLowerCase() === normalizedSlug ||
+      (c.label || "").toLowerCase() === normalizedSlug ||
+      (c.id || "").toLowerCase() === normalizedSlug.replace(/s$/, "") ||
+      normalizedSlug === (c.id || "").toLowerCase() + "s"
+  );
+  if (match) return match;
+
+  // Fallback category config so valid category pages render cleanly
+  const formattedLabel = slug
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (l) => l.toUpperCase());
+  return {
+    id: slug,
+    label: formattedLabel,
+    icon: "",
+  };
 });
 
 /**
@@ -94,6 +110,15 @@ export const getCollectionBySlug = cache(async function getCollectionBySlug(
  */
 export const getCollectionIdBySlug = cache(async function getCollectionIdBySlug(slug: string): Promise<string | null> {
   const rows = await getCachedActiveCollections();
-  const match = rows.find((r) => r.slug === slug);
+  const normalized = (slug || "").toLowerCase().trim();
+  const match = rows.find(
+    (r) =>
+      (r.slug || "").toLowerCase() === normalized ||
+      r.id === slug ||
+      (r.title || "").toLowerCase() === normalized ||
+      (r.slug || "").toLowerCase() === normalized.replace(/s$/, "") ||
+      normalized === (r.slug || "").toLowerCase() + "s"
+  );
   return match ? match.id : null;
 });
+

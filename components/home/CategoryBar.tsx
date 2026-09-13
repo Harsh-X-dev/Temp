@@ -46,8 +46,13 @@ export default function CategoryBar({ categories }: CategoryBarProps) {
   );
 }
 
+// Module-level cache for category icons loaded during this browser session
+const loadedCategoryIconUrls = new Set<string>();
+
 function CategoryBarItem({ cat, isActive }: { cat: CategoryConfig; isActive: boolean }) {
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(() => {
+    return !cat.icon || loadedCategoryIconUrls.has(cat.icon);
+  });
   const href = cat.id === "all" ? "/collection/all" : `/collection/${cat.id}`;
 
   return (
@@ -86,7 +91,10 @@ function CategoryBarItem({ cat, isActive }: { cat: CategoryConfig; isActive: boo
               }`}
               sizes="(max-width: 640px) 54px, (max-width: 768px) 60px, 68px"
               priority={false}
-              onLoad={() => setImageLoaded(true)}
+              onLoad={() => {
+                if (cat.icon) loadedCategoryIconUrls.add(cat.icon);
+                setImageLoaded(true);
+              }}
             />
           ) : (
             /* Gradient fallback if category has no image */

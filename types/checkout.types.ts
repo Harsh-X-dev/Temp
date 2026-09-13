@@ -157,7 +157,7 @@ export interface CreateProfileInput {
   userId: string;
   fullName: string;
   phone: string;
-  emailId?: string;
+  emailId: string;
   gender?: string;
   birthDate?: string;
   line1: string;

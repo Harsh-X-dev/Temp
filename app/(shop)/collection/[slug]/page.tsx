@@ -5,11 +5,10 @@ import {
   getCollectionBySlug,
 } from "@/services/collection.service";
 import { getProductsByCollectionSlug, getFilterMetadata } from "@/services/product.service";
-import FilterBar from "@/components/home/FilterBar";
-import ProductGrid from "@/components/ui/data-display/ProductGrid";
 import { matchesTypeFilter, matchesMukhiFilter, matchesOriginFilter } from "@/lib/productFilters";
+import CollectionClient from "./CollectionClient";
 
-export const revalidate = 60;
+export const revalidate = 3600;
 export const dynamicParams = true;
 
 // ---------------------------------------------------------------------------
@@ -57,8 +56,6 @@ export async function generateMetadata({
   return { title, description };
 }
 
-import CollectionClient from "./CollectionClient";
-
 // ---------------------------------------------------------------------------
 // Page component
 // ---------------------------------------------------------------------------
@@ -75,18 +72,18 @@ export default async function CollectionPage({
     mukhi?: string;
     origin?: string;
     rating?: string;
-    inStock?: string;
+    title?: string;
   }>;
 }) {
   const { slug } = await params;
   const sp = (await searchParams) ?? {};
-  const { sort, minPrice, maxPrice, types, mukhi, origin, rating, inStock } = sp;
+  const { sort, minPrice, maxPrice, types, mukhi, origin, rating, title } = sp;
 
   // Fetch active categories and filter metadata concurrently
   const [category, categories, filterMetadata, initialProducts] = await Promise.all([
     getCollectionBySlug(slug),
     getActiveCollections(),
-    getFilterMetadata(slug),
+    getFilterMetadata(),
     getProductsByCollectionSlug(slug, sort),
   ]);
 
@@ -137,11 +134,28 @@ export default async function CollectionPage({
     }
   }
 
-  if (inStock === "true") {
-    products = products.filter((p) => p.variants && p.variants.some((v) => v.isActive));
-  }
+  let heading = category.id === "all" ? "All Products" : category.label;
 
-  const heading = category.id === "all" ? "All Products" : category.label;
+  if (title) {
+    heading = title;
+  } else if (origin) {
+    const originCapitalized = origin.charAt(0).toUpperCase() + origin.slice(1);
+    if (types) {
+      if (types.toLowerCase().includes("rudraksha")) {
+        heading = `${originCapitalized} Origin - Rudraksha`;
+      } else if (types.toLowerCase().includes("bracelet")) {
+        heading = `${originCapitalized} Origin - Bracelets`;
+      } else if (types.toLowerCase().includes("mala")) {
+        heading = `${originCapitalized} Origin - Malas`;
+      } else {
+        heading = `${originCapitalized} Origin - ${types}`;
+      }
+    } else if (category.id !== "all") {
+      heading = `${originCapitalized} Origin - ${category.label}`;
+    } else {
+      heading = `${originCapitalized} Origin Collection`;
+    }
+  }
 
   return (
     <CollectionClient

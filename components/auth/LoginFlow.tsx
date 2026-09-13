@@ -41,7 +41,7 @@ export default function LoginFlow() {
     redirectTo,
   } = useLoginFlow();
 
-  const { user, setProfile, addresses, setAddresses } = useAuthStore();
+  const { user, profile, setProfile, addresses, setAddresses } = useAuthStore();
   const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
@@ -116,7 +116,13 @@ export default function LoginFlow() {
           isOpen={step === "create_profile"}
           onClose={() => router.push(redirectTo)}
           userId={user?.id || ""}
-          phone={phone}
+          phone={
+            phone ||
+            (profile?.phone || user?.phone || "")
+              .replace(/^\+91/, "")
+              .replace(/\D/g, "")
+          }
+          initialFullName={profile?.fullName || ""}
           onSubmit={handleInitialProfileSubmit}
           isSubmitting={isSubmittingProfile}
         />

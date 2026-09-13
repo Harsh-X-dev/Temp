@@ -7,7 +7,7 @@ import { IconStarOutline, IconStarFilled } from '@/components/productDetailPage/
 import BackButton from '@/components/ui/buttons/BackButton';
 import { toast } from '@/lib/toast';
 import { useAuth } from '@/hooks/useAuth';
-import { submitReview, checkCanUserReviewProduct } from '@/services/reviews.service';
+import { checkCanUserReviewProduct } from '@/services/reviews.service';
 import { createSupabaseBrowserClient } from '@/services/supabase/client';
 import { submitReviewAction } from '@/app/(shop)/product/[slug]/write-review/actions';
 
@@ -92,7 +92,63 @@ export default function WriteReviewClient({
   const [review, setReview] = useState('');
   const [photos, setPhotos] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Dynamic mobile keyboard awareness via Visual Viewport API
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+
+    const handleViewportChange = () => {
+      const vv = window.visualViewport;
+      if (!vv) return;
+      const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKeyboardOffset(offset);
+    };
+
+    window.visualViewport.addEventListener('resize', handleViewportChange);
+    window.visualViewport.addEventListener('scroll', handleViewportChange);
+
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleViewportChange);
+      window.visualViewport?.removeEventListener('scroll', handleViewportChange);
+    };
+  }, []);
+
+  // Restore review draft from sessionStorage on mount / refresh
+  useEffect(() => {
+    if (typeof window === 'undefined' || !product.id) return;
+    try {
+      const savedDraft = sessionStorage.getItem(`gemostone_review_draft_${product.id}`);
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.rating) setRating(Number(parsed.rating) || 0);
+        if (parsed.title) setTitle(String(parsed.title));
+        if (parsed.review) setReview(String(parsed.review));
+      }
+    } catch (e) {
+      console.warn('[WriteReviewClient] Failed to load review draft:', e);
+    }
+  }, [product.id]);
+
+  // Auto-save review draft to sessionStorage as user types
+  useEffect(() => {
+    if (typeof window === 'undefined' || !product.id) return;
+    if (rating > 0 || title.trim() || review.trim()) {
+      try {
+        sessionStorage.setItem(
+          `gemostone_review_draft_${product.id}`,
+          JSON.stringify({ rating, title, review })
+        );
+      } catch (e) {}
+    }
+  }, [rating, title, review, product.id]);
+
+  const handleInputFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setTimeout(() => {
+      e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 250);
+  };
 
   // Require login, purchase, and unreviewed status
   useEffect(() => {
@@ -151,18 +207,14 @@ export default function WriteReviewClient({
     setIsSubmitting(true);
 
     try {
-      // 1. Build form data immediately (images already pre-compressed)
       const formData = new FormData();
       formData.append('product_id', product.id);
       formData.append('rating', rating.toString());
       formData.append('heading', title.trim() || 'Review');
       formData.append('comment', review.trim());
-      formData.append('title', title.trim() || 'Review');
-      formData.append('body', review.trim());
 
-      const effectiveUserId = user?.id;
-      if (effectiveUserId) {
-        formData.append('user_id', effectiveUserId);
+      if (user?.id) {
+        formData.append('user_id', user.id);
       }
       const effectiveName =
         profile?.fullName ||
@@ -171,26 +223,51 @@ export default function WriteReviewClient({
         'Verified Customer';
       formData.append('user_name', effectiveName);
 
-      const resolvedOrderId = orderItemId || '00000000-0000-0000-0000-000000000000';
-      formData.append('order_id', resolvedOrderId);
-      formData.append('order_item_id', resolvedOrderId);
+      if (orderItemId && orderItemId !== '00000000-0000-0000-0000-000000000000') {
+        formData.append('order_id', orderItemId);
+      }
+
+      // Upload photos to Supabase Storage "media" bucket and return image URLs to backend
+      const uploadedImageUrls: string[] = [];
+      if (photos.length > 0) {
+        for (let i = 0; i < photos.length; i++) {
+          const photo = photos[i];
+          const ext = photo.name.split('.').pop() || 'jpg';
+          const filePath = `reviews/${effectiveUserId || 'guest'}/${Date.now()}_${i}.${ext}`;
+          try {
+            const { error: uploadError } = await supabase.storage
+              .from('media')
+              .upload(filePath, photo, { upsert: true });
+
+            if (!uploadError) {
+              const { data } = supabase.storage.from('media').getPublicUrl(filePath);
+              if (data?.publicUrl) {
+                uploadedImageUrls.push(data.publicUrl);
+              }
+            } else {
+              console.warn('[WriteReviewClient] Failed to upload image to media bucket:', uploadError);
+            }
+          } catch (storageErr) {
+            console.warn('[WriteReviewClient] Storage upload error:', storageErr);
+          }
+        }
+      }
+
+      // Return image URLs to backend
+      uploadedImageUrls.forEach((url) => {
+        formData.append('image_urls', url);
+      });
+      if (uploadedImageUrls.length > 0) {
+        formData.append('image_urls_json', JSON.stringify(uploadedImageUrls));
+      }
 
       photos.forEach((photo) => {
         formData.append('images', photo);
       });
 
-      // 2. Direct high-speed API call with session token
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      try {
-        await submitReview(formData, token);
-      } catch (directErr: any) {
-        console.warn('[WriteReviewClient] Direct API failed, using server action fallback:', directErr);
-        const res = await submitReviewAction(formData, product.slug);
-        if (!res.success) {
-          throw new Error(res.error || directErr?.message || 'Failed to submit review.');
-        }
+      const res = await submitReviewAction(formData, product.slug);
+      if (!res.success) {
+        throw new Error(res.error || 'Failed to submit review.');
       }
 
       // 3. Instant UI reset & 0ms instant redirect to PDP
@@ -198,6 +275,12 @@ export default function WriteReviewClient({
       setTitle('');
       setReview('');
       setPhotos([]);
+
+      if (typeof window !== 'undefined' && product.id) {
+        try {
+          sessionStorage.removeItem(`gemostone_review_draft_${product.id}`);
+        } catch (e) {}
+      }
 
       toast.success(
         'Review Submitted ⭐',
@@ -306,6 +389,7 @@ export default function WriteReviewClient({
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            onFocus={handleInputFocus}
             placeholder="Summarize your experience..."
             className="h-[44px] px-3.5 border border-border-strong rounded-[10px] w-full text-[13px] outline-none focus:border-primary-orange transition-all bg-white text-text-primary placeholder:text-text-muted shadow-2xs"
           />
@@ -319,6 +403,7 @@ export default function WriteReviewClient({
           <textarea
             value={review}
             onChange={(e) => setReview(e.target.value)}
+            onFocus={handleInputFocus}
             placeholder="Tell others what you think about this product..."
             className="h-[110px] p-3 border border-border-strong rounded-[10px] w-full text-[13px] resize-none outline-none focus:border-primary-orange transition-all bg-white text-text-primary placeholder:text-text-muted shadow-2xs leading-relaxed"
           />
@@ -403,7 +488,13 @@ export default function WriteReviewClient({
       </main>
 
       {/* Sticky Bottom Bar with Submit Review Button */}
-      <footer className="sticky bottom-0 z-40 bg-white border-t border-border-strong px-4 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:pt-5 md:pb-6 shadow-sm">
+      <footer 
+        className="sticky z-40 bg-white border-t border-border-strong px-4 pt-3 pb-3 md:pt-4 md:pb-6 shadow-md transition-all duration-150 ease-out"
+        style={{
+          bottom: keyboardOffset > 0 ? `${keyboardOffset}px` : '0px',
+          paddingBottom: keyboardOffset > 0 ? '12px' : 'max(1.25rem, env(safe-area-inset-bottom))',
+        }}
+      >
         <div className="max-w-xl mx-auto w-full">
           <button
             type="button"

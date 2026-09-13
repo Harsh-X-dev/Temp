@@ -11,6 +11,7 @@ interface OrdersState {
   setReviews: (reviews: Review[], pendingCount?: number) => void;
   getOrder: (orderNumber: string) => OrderDetail | undefined;
   upsertOrder: (order: OrderDetail) => void;
+  clearOrders: () => void;
 }
 
 export const useOrdersStore = create<OrdersState>((set, get) => ({
@@ -45,5 +46,14 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
           ? state.orders.map((o) => (o.orderNumber === order.orderNumber ? order : o))
           : [order, ...state.orders],
       };
+    }),
+
+  clearOrders: () =>
+    set({
+      orders: [],
+      reviews: [],
+      pendingReviewsCount: 0,
+      lastFetchedOrders: null,
+      lastFetchedReviews: null,
     }),
 }));

@@ -261,68 +261,72 @@ export function rankProductsDefault(products: Product[]): Product[] {
 // Public API
 // ---------------------------------------------------------------------------
 
-/**
- * Fetch the top 8 products for the homepage Bestsellers section.
- *
- * First queries the database view `homepage_bestsellers_view` for optimal
- * mathematical ranking and category diversity. If unavailable, falls back
- * gracefully to in-memory `rankProductsDefault`.
- */
-export const getFeaturedProducts = cache(async function getFeaturedProducts(): Promise<Product[]> {
-  const supabase = createSupabaseServerClient();
+const getCachedFeaturedProducts = unstable_cache(
+  async (): Promise<Product[]> => {
+    const supabase = createSupabaseServerClient();
 
-  try {
-    // 1. Try querying the database view for the top ranked product IDs
-    const { data: viewData, error: viewError } = await supabase
-      .from("homepage_bestsellers_view")
-      .select("id")
-      .limit(8);
+    try {
+      // 1. Try querying the database view for the top ranked product IDs
+      const { data: viewData, error: viewError } = await supabase
+        .from("homepage_bestsellers_view")
+        .select("id")
+        .limit(8);
 
-    if (!viewError && viewData && viewData.length > 0) {
-      const rankedIds = viewData.map((row: { id: string }) => row.id);
+      if (!viewError && viewData && viewData.length > 0) {
+        const rankedIds = viewData.map((row: { id: string }) => row.id);
 
-      // Fetch full product details (images, variants, reviews) for the ranked IDs
-      const { data: productRows, error: productError } = await supabase
-        .from("products")
-        .select(PRODUCT_SELECT)
-        .in("id", rankedIds)
-        .returns<ProductRow[]>();
+        // Fetch full product details (images, variants, reviews) for the ranked IDs
+        const { data: productRows, error: productError } = await supabase
+          .from("products")
+          .select(PRODUCT_SELECT)
+          .in("id", rankedIds)
+          .returns<ProductRow[]>();
 
-      if (!productError && productRows && productRows.length > 0) {
-        const mappedMap = new Map<string, Product>();
-        for (const row of productRows) {
-          mappedMap.set(row.id, mapRowToProduct(row));
-        }
+        if (!productError && productRows && productRows.length > 0) {
+          const mappedMap = new Map<string, Product>();
+          for (const row of productRows) {
+            mappedMap.set(row.id, mapRowToProduct(row));
+          }
 
-        // Return strictly in the order computed by homepage_bestsellers_view
-        const ordered = rankedIds
-          .map((id) => mappedMap.get(id))
-          .filter((p): p is Product => Boolean(p));
+          // Return strictly in the order computed by homepage_bestsellers_view
+          const ordered = rankedIds
+            .map((id) => mappedMap.get(id))
+            .filter((p): p is Product => Boolean(p));
 
-        if (ordered.length > 0) {
-          return ordered;
+          if (ordered.length > 0) {
+            return ordered;
+          }
         }
       }
+    } catch (err) {
+      console.warn("[ProductService] homepage_bestsellers_view query failed, falling back:", err);
     }
-  } catch (err) {
-    console.warn("[ProductService] homepage_bestsellers_view query failed, falling back:", err);
-  }
 
-  // 2. Fallback: Query active products directly and apply default ranking
-  const { data, error } = await supabase
-    .from("products")
-    .select(PRODUCT_SELECT)
-    .eq("status", "active")
-    .limit(60)
-    .returns<ProductRow[]>();
+    // 2. Fallback: Query active products directly and apply default ranking
+    const { data, error } = await supabase
+      .from("products")
+      .select(PRODUCT_SELECT)
+      .eq("status", "active")
+      .limit(60)
+      .returns<ProductRow[]>();
 
-  if (error) {
-    console.error("[ProductService] Failed to fetch fallback featured products:", error.message);
-    return [];
-  }
+    if (error) {
+      console.error("[ProductService] Failed to fetch fallback featured products:", error.message);
+      return [];
+    }
 
-  const allMapped = rankProductsDefault((data ?? []).map(mapRowToProduct));
-  return allMapped.slice(0, 8);
+    const allMapped = rankProductsDefault((data ?? []).map(mapRowToProduct));
+    return allMapped.slice(0, 8);
+  },
+  ["homepage-featured-bestsellers"],
+  { revalidate: 60, tags: ["products"] }
+);
+
+/**
+ * Fetch the top 8 products for the homepage Bestsellers section.
+ */
+export const getFeaturedProducts = cache(async function getFeaturedProducts(): Promise<Product[]> {
+  return getCachedFeaturedProducts();
 });
 
 /**
@@ -367,42 +371,76 @@ const getCachedProductsByCollection = unstable_cache(
       return data;
     }
 
-    // Resolve the collection's internal UUID from the URL slug
+    const normalizedSlug = (slug || "").toLowerCase().trim();
+    const cleanWord = normalizedSlug.replace(/s$/, ""); // singular form
+
+    // Extract meaningful individual search tokens (e.g. "mukhi-series" -> ["mukhi"])
+    const rawTokens = normalizedSlug
+      .split(/[-_\s]+/)
+      .filter((t) => t.length > 2 && t !== "series" && t !== "collection" && t !== "items");
+    const uniqueTokens = Array.from(new Set([normalizedSlug, cleanWord, ...rawTokens]));
+
+    // 1. Resolve the collection's internal UUID from the URL slug
     const collectionId = await getCollectionIdBySlug(slug);
-    if (!collectionId) {
-      return [];
+    let junctionProductIds: string[] = [];
+
+    if (collectionId) {
+      // Fetch product IDs that belong to this collection from product_collections
+      const { data: junctionRows, error: junctionError } = await supabase
+        .from("product_collections")
+        .select("product_id")
+        .eq("collection_id", collectionId);
+
+      if (!junctionError && junctionRows && junctionRows.length > 0) {
+        junctionProductIds = junctionRows.map((r) => r.product_id as string);
+      }
     }
 
-    // Fetch product IDs that belong to this collection
-    const { data: junctionRows, error: junctionError } = await supabase
-      .from("product_collections")
-      .select("product_id")
-      .eq("collection_id", collectionId);
+    // 2. Fetch products by collection junction table if available
+    let directProducts: ProductRow[] = [];
+    if (junctionProductIds.length > 0) {
+      const { data, error } = await supabase
+        .from("products")
+        .select(PRODUCT_SELECT)
+        .eq("status", "active")
+        .in("id", junctionProductIds)
+        .limit(60)
+        .returns<ProductRow[]>();
 
-    if (junctionError || !junctionRows || junctionRows.length === 0) {
-      return [];
+      if (!error && data) {
+        directProducts = data;
+      }
     }
 
-    const productIds = junctionRows.map((r) => r.product_id as string);
+    // 3. Fallback & supplementary matching: Check products tags, title, slug, attributes
+    const orConditions: string[] = [];
+    uniqueTokens.forEach((token) => {
+      orConditions.push(`title.ilike.%${token}%`);
+      orConditions.push(`slug.ilike.%${token}%`);
+      orConditions.push(`tags.cs.{${token}}`);
+    });
 
-    // Fetch the matching products with their images and variants
-    const { data, error } = await supabase
+    const { data: fallbackData } = await supabase
       .from("products")
       .select(PRODUCT_SELECT)
       .eq("status", "active")
-      .in("id", productIds)
+      .or(orConditions.join(","))
       .limit(60)
       .returns<ProductRow[]>();
 
-    if (error || !data) {
-      if (error) console.error("[ProductService] Failed to fetch products by collection:", error.message);
-      return [];
-    }
+    // Merge and deduplicate by product id
+    const productMap = new Map<string, ProductRow>();
+    directProducts.forEach((p) => productMap.set(p.id, p));
+    (fallbackData || []).forEach((p) => {
+      if (!productMap.has(p.id)) {
+        productMap.set(p.id, p);
+      }
+    });
 
-    return data;
+    return Array.from(productMap.values());
   },
   ["products-by-collection-slug"],
-  { revalidate: 60, tags: ["products"] }
+  { revalidate: 3600, tags: ["products"] }
 );
 
 /**
@@ -517,40 +555,14 @@ export interface FilterMetadata {
 }
 
 const getCachedFilterMetadata = unstable_cache(
-  async (collectionSlug?: string): Promise<FilterMetadata> => {
+  async (): Promise<FilterMetadata> => {
     const supabase = createSupabaseServerClient();
 
-    let productQuery = supabase
-      .from("products")
-      .select("title, slug, tags, options, attributes, product_variants(option1_value, option2_value, option3_value, price, is_active)")
-      .eq("status", "active");
-
-    // If scoped to a specific collection, filter to products in that collection
-    if (collectionSlug && collectionSlug !== "all") {
-      const collectionId = await getCollectionIdBySlug(collectionSlug);
-      if (collectionId) {
-        const { data: junctionRows } = await supabase
-          .from("product_collections")
-          .select("product_id")
-          .eq("collection_id", collectionId);
-
-        const productIds = (junctionRows || []).map((r) => r.product_id as string);
-        if (productIds.length > 0) {
-          productQuery = productQuery.in("id", productIds);
-        } else {
-          return {
-            gemstoneTypes: [],
-            mukhiTypes: [],
-            origins: [],
-            minPrice: 0,
-            maxPrice: 0,
-          };
-        }
-      }
-    }
-
     const [{ data: products }, { data: collections }] = await Promise.all([
-      productQuery,
+      supabase
+        .from("products")
+        .select("title, slug, tags, options, attributes, product_variants(option1_value, option2_value, option3_value, price, is_active)")
+        .eq("status", "active"),
       supabase
         .from("collections")
         .select("title, slug")
@@ -564,7 +576,7 @@ const getCachedFilterMetadata = unstable_cache(
     let minPrice = Infinity;
     let maxPrice = 0;
 
-    // Add categories from collections table (excluding 'all' and gift hampers)
+    // 1. Add primary store collections first
     (collections || []).forEach((c) => {
       if (c.title && c.slug !== "all" && c.slug !== "gift-hampers") {
         gemstoneTypesSet.add(c.title);
@@ -573,19 +585,19 @@ const getCachedFilterMetadata = unstable_cache(
 
     const knownOrigins = ["Nepal", "Indonesia", "India", "Burma", "Ceylon", "Sri Lanka", "Brazil", "Russia", "Peru", "Zambia", "Colombia"];
     const knownGemstones = [
-      "Emerald (Panna)",
-      "Yellow Sapphire (Pukhraj)",
-      "Blue Sapphire (Neelam)",
-      "Ruby (Manik)",
-      "Red Coral (Moonga)",
+      "Emerald",
+      "Yellow Sapphire",
+      "Blue Sapphire",
+      "Ruby",
+      "Red Coral",
       "Pyrite",
-      "Sphatik (Crystal)",
+      "Sphatik",
       "Red Jasper",
       "Amethyst",
       "Tiger Eye",
-      "Cat's Eye (Lehsuniya)",
-      "Hessonite (Gomed)",
-      "Pearl (Moti)",
+      "Cat's Eye",
+      "Hessonite",
+      "Pearl",
     ];
 
     (products || []).forEach((p: any) => {
@@ -670,7 +682,7 @@ const getCachedFilterMetadata = unstable_cache(
     };
   },
   ["filter-metadata-cache"],
-  { revalidate: 60, tags: ["products", "collections"] }
+  { revalidate: 3600, tags: ["products", "collections"] }
 );
 
 /**
@@ -679,8 +691,8 @@ const getCachedFilterMetadata = unstable_cache(
  * If collectionSlug is specified (and !== "all"), only products in that collection
  * via product_collections are analyzed.
  */
-export const getFilterMetadata = cache(async function getFilterMetadata(collectionSlug?: string): Promise<FilterMetadata> {
-  return getCachedFilterMetadata(collectionSlug);
+export const getFilterMetadata = cache(async function getFilterMetadata(_collectionSlug?: string): Promise<FilterMetadata> {
+  return getCachedFilterMetadata();
 });
 
 

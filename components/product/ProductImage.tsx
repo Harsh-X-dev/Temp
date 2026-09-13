@@ -5,12 +5,17 @@ import Image from "next/image";
 import WishlistToggleButton from "./WishlistToggleButton";
 import { BaseProductComponentProps } from "@/types/product.types";
 
+// Module-level cache for images loaded during this browser session
+const loadedProductImageUrls = new Set<string>();
+
 export interface ProductImageProps extends BaseProductComponentProps {
   priority?: boolean;
 }
 
 export default function ProductImage({ product, variant, priority = false }: ProductImageProps) {
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(() => {
+    return !product.imageUrl || loadedProductImageUrls.has(product.imageUrl);
+  });
   const isWishlistVariant = variant === "wishlist";
 
   // Primary badge tag (e.g. "BESTSELLER", "NEW", "TRENDING")
@@ -36,7 +41,10 @@ export default function ProductImage({ product, variant, priority = false }: Pro
         style={{ borderRadius: "12px" }}
         sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
         quality={85}
-        onLoad={() => setImageLoaded(true)}
+        onLoad={() => {
+          if (product.imageUrl) loadedProductImageUrls.add(product.imageUrl);
+          setImageLoaded(true);
+        }}
       />
 
       {/* Unified Badge Style Matching Figma node 1201:9476 */}

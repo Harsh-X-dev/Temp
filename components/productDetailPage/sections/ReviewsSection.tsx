@@ -201,6 +201,10 @@ export default function ReviewsSection({
                 ? `/product/${productSlug}/write-review?orderId=${eligibility.orderId}`
                 : `/product/${productSlug}/write-review`
             } 
+            prefetch={true}
+            onMouseEnter={() => {
+              if (productSlug) router.prefetch(`/product/${productSlug}/write-review`);
+            }}
             onClick={handleWriteReviewClick}
             className="w-full py-[11px] rounded-full border border-primary-orange text-primary-orange font-semibold text-[14px] flex items-center justify-center bg-white transition-all hover:bg-primary-orange hover:text-white shadow-xs cursor-pointer"
           >

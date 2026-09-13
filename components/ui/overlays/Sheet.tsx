@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { useHasMounted } from "@/hooks/useHasMounted";
+import { useKeyboardOffset } from "@/hooks/useKeyboardOffset";
 
 interface SheetProps {
   isOpen: boolean;
@@ -34,12 +35,13 @@ export default function Sheet({
   onClose,
   children,
   className = "",
-  zIndex = 80,
+  zIndex = 150,
   ...props
 }: SheetProps) {
   const mounted = useHasMounted();
   useBodyScrollLock(isOpen);
   useEscapeKey(isOpen, onClose);
+  const { keyboardOffset, topOffset } = useKeyboardOffset(isOpen);
 
   if (!isOpen || !mounted) return null;
 
@@ -56,7 +58,15 @@ export default function Sheet({
         aria-modal={isOpen}
         aria-label={props["aria-label"]}
         inert={!isOpen}
-        style={{ zIndex: zIndex + 10 }}
+        style={{
+          zIndex: zIndex + 10,
+          ...(keyboardOffset > 0
+            ? {
+                bottom: `${keyboardOffset}px`,
+                top: `${topOffset}px`,
+              }
+            : {}),
+        }}
         className={`fixed inset-0 flex flex-col bg-white transition-transform duration-300 ease-out w-full max-w-full overflow-x-hidden ${
           isOpen ? "translate-y-0" : "translate-y-full"
         } ${className}`}

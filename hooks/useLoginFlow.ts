@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { isValidPhone } from "@/lib/validators";
-import { isValidOtp } from "@/lib/validators";
+import { isValidPhone, isValidOtp, isProfileComplete } from "@/lib/validators";
 import { sendOtp, verifyOtp } from "@/services/auth.service";
 import { OTP_LENGTH, RESEND_SECONDS } from "@/lib/constants/auth";
 import { createSupabaseBrowserClient } from "@/services/supabase/client";
@@ -215,7 +214,7 @@ export function useLoginFlow() {
 
         if (!profile) {
           resolution = { status: "not_found" };
-        } else if (profile.fullName?.trim()) {
+        } else if (isProfileComplete(profile)) {
           resolution = { status: "complete", profile, addresses };
         } else {
           resolution = { status: "incomplete", profile, addresses };

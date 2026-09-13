@@ -1,7 +1,7 @@
 export function OrderHistorySkeleton() {
   return (
     <div className="flex flex-col gap-4 w-full">
-      {[...Array(3)].map((_, i) => (
+      {[...Array(5)].map((_, i) => (
         <div
           key={i}
           className="bg-white border border-[#e5e0da] rounded-[12px] p-4 flex flex-col gap-3 w-full"

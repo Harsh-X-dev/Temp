@@ -19,6 +19,7 @@ import type {
 import { api, ApiError } from "@/services/http";
 
 import { fetchProfileWithAddresses, saveAddress } from "./profile.service";
+import { isSyntheticEmail } from "@/lib/validators";
 
 /**
  * Calculate Cart & Checkout prices via backend single-source-of-truth API:
@@ -28,7 +29,49 @@ export async function calculateCheckoutPricesApi(
   payload: CalculateCheckoutPayload
 ): Promise<CalculateCheckoutResponse> {
   try {
-    const { data } = await api.post<CalculateCheckoutResponse>("/checkout/calculate", payload);
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const cleanItems = (payload.items || [])
+      .map((item) => {
+        const cleanId = item.variant_id ? item.variant_id.replace("-energized", "").trim() : "";
+        return {
+          variant_id: cleanId,
+          quantity: Math.max(1, Number(item.quantity) || 1),
+          ...(item.is_energization_addon ? { is_energization_addon: true } : {}),
+        };
+      })
+      .filter((item) => uuidRegex.test(item.variant_id));
+
+    if (cleanItems.length === 0) {
+      return {
+        success: false,
+        message: "No valid items found for checkout calculation",
+      };
+    }
+
+    const cleanPayload: Record<string, any> = {
+      items: cleanItems,
+      payment_method: payload.payment_method || "prepaid",
+    };
+
+    if (payload.coupon_code && typeof payload.coupon_code === "string" && payload.coupon_code.trim()) {
+      cleanPayload.coupon_code = payload.coupon_code.trim();
+    }
+
+    if (payload.customer_id && typeof payload.customer_id === "string" && uuidRegex.test(payload.customer_id.trim())) {
+      cleanPayload.customer_id = payload.customer_id.trim();
+    }
+
+    if (payload.shipping_address && typeof payload.shipping_address === "object") {
+      const addr: Record<string, string> = {};
+      if (payload.shipping_address.pincode) addr.pincode = String(payload.shipping_address.pincode).trim();
+      if (payload.shipping_address.city) addr.city = String(payload.shipping_address.city).trim();
+      if (payload.shipping_address.state) addr.state = String(payload.shipping_address.state).trim();
+      if (Object.keys(addr).length > 0) {
+        cleanPayload.shipping_address = addr;
+      }
+    }
+
+    const { data } = await api.post<CalculateCheckoutResponse>("/checkout/calculate", cleanPayload);
     return data;
   } catch (error) {
     const apiErr = ApiError.from(error);
@@ -303,7 +346,10 @@ function buildOrderPayload(
 ) {
   const customerName = profile?.fullName || user.user_metadata?.full_name || "Customer";
   const customerPhone = profile?.phone || user.phone || "";
-  const customerEmail = profile?.email || user.email || "";
+  const customerEmail =
+    profile?.email && !isSyntheticEmail(profile.email)
+      ? profile.email
+      : "";
 
   return {
     user_id: user.id,
@@ -613,9 +659,11 @@ export async function fetchBuyNowItem(
     : null;
 
   const variantIdToUse = currentAddonPrice > 0 ? `${selectedVariant.id}-energized` : (selectedVariant.id || "");
-  const variantLabelToUse = selectedVariant.option1_value
-    ? (currentAddonPrice > 0 ? `${selectedVariant.option1_value} (Energized)` : selectedVariant.option1_value)
-    : (currentAddonPrice > 0 ? 'Energized' : 'One size');
+  const optValues = [selectedVariant.option1_value, selectedVariant.option2_value, selectedVariant.option3_value].filter(
+    (val): val is string => Boolean(val && val !== "Default")
+  );
+  const baseLabel = optValues.length > 0 ? optValues.join(", ") : "One size";
+  const variantLabelToUse = currentAddonPrice > 0 ? `${baseLabel} (Energized)` : baseLabel;
 
   return {
     productId: product.id,

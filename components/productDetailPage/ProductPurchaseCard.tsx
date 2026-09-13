@@ -60,9 +60,11 @@ export default function ProductPurchaseCard({
     const opt2Name = options?.[1]?.name || "Material";
     const opt3Name = options?.[2]?.name || "Quality";
     
-    return (!v.option1Value || v.option1Value === selectedOptions[opt1Name]) &&
-           (!v.option2Value || v.option2Value === selectedOptions[opt2Name]) &&
-           (!v.option3Value || v.option3Value === selectedOptions[opt3Name]);
+    const match1 = !selectedOptions[opt1Name] || !v.option1Value || v.option1Value === selectedOptions[opt1Name];
+    const match2 = !selectedOptions[opt2Name] || !v.option2Value || v.option2Value === selectedOptions[opt2Name];
+    const match3 = !selectedOptions[opt3Name] || !v.option3Value || v.option3Value === selectedOptions[opt3Name];
+
+    return match1 && match2 && match3;
   }) || variants[0];
   const currentAddonPrice = (addEnergization && isEnergized && energizationAddonPrice) ? energizationAddonPrice : 0;
   
@@ -70,7 +72,9 @@ export default function ProductPurchaseCard({
   const finalCompareAtPrice = selectedVariant.compareAtPrice ? selectedVariant.compareAtPrice + currentAddonPrice : null;
 
   const variantIdToUse = currentAddonPrice > 0 ? `${selectedVariant?.id}-energized` : (selectedVariant?.id || "");
-  const optionValues = [selectedVariant.option1Value, selectedVariant.option2Value, selectedVariant.option3Value].filter(Boolean);
+  const optionValues = [selectedVariant?.option1Value, selectedVariant?.option2Value, selectedVariant?.option3Value].filter(
+    (val): val is string => Boolean(val && val !== 'Default')
+  );
   const baseLabel = optionValues.length > 0 ? optionValues.join(', ') : 'One size';
   const variantLabelToUse = currentAddonPrice > 0 ? `${baseLabel} (Energized)` : baseLabel;
 

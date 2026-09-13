@@ -65,12 +65,10 @@ function ScrollColumn({
       <div style={{ height: ITEM_H * 2, flexShrink: 0 }} />
       {items.map((item, i) => {
         const dist = Math.abs(i - selectedIndex);
-        let textClass = "text-[#d1d5db] font-normal text-[14px]";
-        if (dist === 0) {
-          textClass = "text-primary-orange font-bold text-[15px]";
-        } else if (dist === 1) {
-          textClass = "text-[#8e8e93] font-medium text-[14px]";
-        }
+        const textClass =
+          dist === 0
+            ? "text-primary-orange font-bold text-[15px]"
+            : "text-black font-medium text-[14px]";
 
         return (
           <div

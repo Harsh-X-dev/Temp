@@ -18,6 +18,7 @@ import { createSupabaseBrowserClient } from '@/services/supabase/client';
 import type { BillBreakdown } from '@/types/checkout.types';
 import RazorpayCheckout, { useRazorpayCheckout } from '@/components/payment/RazorpayCheckout';
 import PaymentStatusBanner, { getPayButtonLabel, isBusy } from '@/components/payment/PaymentStatus';
+import { isSyntheticEmail } from '@/lib/validators';
 import { toast } from '@/lib/toast';
 
 type PaymentMethod = 'prepaid' | 'cod';
@@ -98,9 +99,14 @@ export default function CheckoutPaymentClient() {
     }, 0);
     const afterProductDiscount = rawSubtotal - productDiscount;
     const couponDiscount = calculateCouponDiscount(selectedCoupon, afterProductDiscount);
-    const deliveryCharges = calculationData?.shipping_amount || 0;
+    const isFreeDelivery = Boolean(
+      selectedCoupon?.isFreeShipping ||
+      selectedCoupon?.discountType === "free_shipping" ||
+      afterProductDiscount >= 999
+    );
+    const deliveryCharges = isFreeDelivery ? 0 : 99;
     const taxableAmount = Math.max(0, afterProductDiscount - couponDiscount);
-    const taxes = calculationData?.tax_amount || 0;
+    const taxes = 0;
     const grandTotal = Math.max(0, taxableAmount + deliveryCharges + taxes);
 
     return {
@@ -115,9 +121,9 @@ export default function CheckoutPaymentClient() {
 
   const prepaidBill = baseBill;
 
-  const displayedGrandTotal = selectedMethod === 'cod'
-    ? baseBill.grandTotal + 50
-    : baseBill.grandTotal;
+  // COD extra charge disabled (commented out for now)
+  // const displayedGrandTotal = selectedMethod === 'cod' ? baseBill.grandTotal + 50 : baseBill.grandTotal;
+  const displayedGrandTotal = baseBill.grandTotal;
 
   // -- Cart manipulation callbacks --------------------------------------------
   const handleClearCart = useCallback(() => {
@@ -151,7 +157,15 @@ export default function CheckoutPaymentClient() {
     selectedCoupon,
     bill: prepaidBill,
     source: source as 'cart' | 'buy-now',
-    user: user ? { name: user.user_metadata?.full_name ?? '', email: user.email ?? '' } : null,
+    user: user
+      ? {
+          name: user.user_metadata?.full_name ?? '',
+          email:
+            profile?.email && !isSyntheticEmail(profile.email)
+              ? profile.email
+              : '',
+        }
+      : null,
     rawUser: user,
     profile,
     address: selectedAddress,
@@ -172,7 +186,9 @@ export default function CheckoutPaymentClient() {
     if (isCodProcessing) return;
     setIsCodProcessing(true);
 
-    const codBill = { ...baseBill, grandTotal: baseBill.grandTotal + 50 };
+    // COD extra charge disabled (commented out for now)
+    // const codBill = { ...baseBill, grandTotal: baseBill.grandTotal + 50 };
+    const codBill = baseBill;
 
     try {
       const result = await createCodOrder(supabase, {
@@ -342,8 +358,11 @@ export default function CheckoutPaymentClient() {
                 <p className="font-semibold text-[13px] md:text-[14px] text-text-primary leading-tight">
                   Cash on Delivery
                 </p>
-                <p className="text-[11px] md:text-[12px] text-text-muted leading-tight mt-0.5">
+                {/* <p className="text-[11px] md:text-[12px] text-text-muted leading-tight mt-0.5">
                   ₹50 extra charge
+                </p> */}
+                <p className="text-[11px] md:text-[12px] text-text-muted leading-tight mt-0.5">
+                  Pay with cash upon delivery
                 </p>
               </div>
             </div>

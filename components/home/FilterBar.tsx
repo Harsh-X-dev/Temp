@@ -40,13 +40,13 @@ export default function FilterBar({
   // Check if any filters are active
   const isFilterActive =
     isFilterOpen ||
+    (Boolean(currentSlug) && currentSlug !== "all") ||
     Boolean(searchParams.get("minPrice")) ||
     Boolean(searchParams.get("maxPrice")) ||
     Boolean(searchParams.get("types")) ||
     Boolean(searchParams.get("mukhi")) ||
     Boolean(searchParams.get("origin")) ||
-    Boolean(searchParams.get("rating")) ||
-    searchParams.get("inStock") === "true";
+    Boolean(searchParams.get("rating"));
 
   // Handle Sort selection
   const handleSortApply = (sortKey: string) => {

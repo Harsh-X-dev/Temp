@@ -6,9 +6,10 @@ import { useEffect } from "react";
 import ProfilePageHeader from "@/components/account/ProfilePageHeader";
 import EditProfileClient from "@/components/account/EditProfileClient";
 import ProfilePageSkeleton from "@/components/account/ProfilePageSkeleton";
+import type { UserProfile } from "@/components/account/types";
 
 export default function EditProfilePage() {
-  const { profile, isAuthenticated, loading, initialized } = useAuth();
+  const { user, profile, isAuthenticated, loading, initialized } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -17,7 +18,7 @@ export default function EditProfilePage() {
     }
   }, [initialized, loading, isAuthenticated, router]);
 
-  if (!initialized || loading || !profile) {
+  if (!initialized || loading || (!isAuthenticated && !user)) {
     return (
       <div className="bg-surface-subtle flex-1 h-full flex flex-col pb-20 lg:pb-10">
         <ProfilePageHeader title="Edit Profile" />
@@ -28,6 +29,16 @@ export default function EditProfilePage() {
     );
   }
 
+  const effectiveProfile: UserProfile = profile || {
+    id: user?.id || "",
+    fullName: user?.user_metadata?.full_name || user?.user_metadata?.name || "",
+    email: null,
+    phone: user?.phone || user?.user_metadata?.phone || null,
+    avatarUrl: user?.user_metadata?.avatar_url || null,
+    dob: null,
+    gender: null,
+  };
+
   return (
     <div className="bg-surface-subtle flex-1 h-full flex flex-col pb-20 lg:pb-10">
       <ProfilePageHeader title="Edit Profile" />
@@ -36,12 +47,12 @@ export default function EditProfilePage() {
         <div className="mx-auto w-full max-w-7xl px-[16px] md:px-8">
           <EditProfileClient
             initialProfile={{
-              full_name: profile.fullName || undefined,
-              email: profile.email || undefined,
-              phone: profile.phone || undefined,
-              dob: profile.dob || undefined,
-              gender: profile.gender || undefined,
-              avatar_url: profile.avatarUrl || undefined,
+              full_name: effectiveProfile.fullName || undefined,
+              email: effectiveProfile.email || undefined,
+              phone: effectiveProfile.phone || undefined,
+              dob: effectiveProfile.dob || undefined,
+              gender: effectiveProfile.gender || undefined,
+              avatar_url: effectiveProfile.avatarUrl || undefined,
             }}
           />
         </div>

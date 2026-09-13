@@ -55,7 +55,7 @@ export default function FormField({
 export function fieldInputClasses(invalid = false): string {
   return [
     "w-full rounded-[12px] border bg-white px-[16px] py-[14px]",
-    "font-['Montserrat'] text-[14px] text-text-primary placeholder:text-text-muted",
+    "font-['Montserrat'] text-[16px] md:text-[14px] text-text-primary placeholder:text-text-muted",
     "outline-none transition-colors",
     "focus:border-primary-orange focus:ring-1 focus:ring-[var(--color-primary-orange)]/20",
     "focus-visible:ring-2 focus-visible:ring-[var(--color-primary-orange)]/25",

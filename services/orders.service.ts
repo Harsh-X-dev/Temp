@@ -133,10 +133,12 @@ function formatOrderRow(o: any): OrderDetail {
   const rawTaxes = parseFloat(paymentInfo.tax_amount || "0");
   const rawTotal = parseFloat(paymentInfo.total || "0");
 
-  const codFee = isCod ? (paymentInfo.cod_charges !== undefined ? parseFloat(paymentInfo.cod_charges) : 50) : 0;
+  // COD extra fee disabled (commented out for now)
+  // const codFee = isCod ? (paymentInfo.cod_charges !== undefined ? parseFloat(paymentInfo.cod_charges) : 50) : 0;
+  const codFee = isCod && paymentInfo.cod_charges !== undefined ? parseFloat(paymentInfo.cod_charges) : 0;
 
   let finalTotal = rawTotal;
-  if (isCod) {
+  if (isCod && codFee > 0) {
     const withoutCod = rawSubtotal + rawShipping + rawTaxes - rawDiscount;
     if (rawTotal <= withoutCod + 1) {
       finalTotal = rawTotal + codFee;

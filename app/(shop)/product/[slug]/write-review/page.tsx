@@ -1,10 +1,19 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { createSupabaseServerClient } from '@/services/supabase/server';
 import WriteReviewClient from '@/components/productDetailPage/WriteReviewClient';
+import WriteReviewSkeleton from '@/components/reviews/WriteReviewSkeleton';
 
 export const revalidate = 60;
 export const dynamicParams = true;
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  return {
+    title: 'Write a Review | Gemostone',
+    description: `Share your experience and review products on Gemostone.`,
+  };
+}
 
 export default async function WriteReviewPage({ 
   params, 
@@ -64,5 +73,9 @@ export default async function WriteReviewPage({
 
   const resolvedOrderId = orderId || orderItemId;
 
-  return <WriteReviewClient product={productInfo} orderItemId={resolvedOrderId} />;
+  return (
+    <Suspense fallback={<WriteReviewSkeleton />}>
+      <WriteReviewClient product={productInfo} orderItemId={resolvedOrderId} />
+    </Suspense>
+  );
 }

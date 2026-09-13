@@ -6,6 +6,8 @@ interface PurposePageProps {
   params: Promise<{ slug: string }>;
 }
 
+export const revalidate = 3600;
+
 export async function generateMetadata({ params }: PurposePageProps): Promise<Metadata> {
   const { slug } = await params;
   const purpose = await getPurposeDetails(slug);
@@ -25,3 +27,4 @@ export default async function PurposeDetailPage({ params }: PurposePageProps) {
 
   return <PurposeDetailClient purpose={purpose} products={products} />;
 }
+

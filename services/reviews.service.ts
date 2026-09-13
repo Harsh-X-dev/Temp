@@ -56,7 +56,7 @@ export async function submitReview(formData: FormData, authToken?: string): Prom
 }
 
 /**
- * 2. Update Helpful Count (POST /api/v1/reviews/:id/helpful)
+ * 2. Update Helpful Count
  * Action: 'increment' (+1) or 'decrement' (-1)
  */
 export async function markReviewHelpful(
@@ -64,11 +64,8 @@ export async function markReviewHelpful(
   action: 'increment' | 'decrement' = 'increment'
 ): Promise<{ success: boolean; helpful_count?: number }> {
   try {
-    const { data } = await api.post<{ success: boolean; helpful_count: number }>(
-      `/reviews/${reviewId}/helpful`,
-      { action }
-    );
-    return { success: data.success, helpful_count: data.helpful_count };
+    const { markReviewHelpfulAction } = await import('@/app/(shop)/product/[slug]/write-review/actions');
+    return await markReviewHelpfulAction(reviewId, action);
   } catch (err) {
     console.error(`[ReviewsService] markReviewHelpful failed for ${reviewId}:`, err);
     return { success: false };
@@ -82,31 +79,6 @@ export async function fetchProductReviews(
   productId: string,
   supabaseClient?: SupabaseClient,
 ): Promise<import("@/types/product.types").Review[]> {
-  /*
-  try {
-    const { data } = await api.get<{ success: boolean; count: number; reviews: any[] }>(
-      `/reviews/product/${productId}`
-    );
-
-    return (data.reviews || [])
-      .filter((r: any) => r.is_approved === true)
-      .map((r: any): import("@/types/product.types").Review => ({
-        id: r.id,
-        rating: r.review_content?.rating ?? r.rating ?? 5,
-        title: r.review_content?.heading ?? r.heading ?? r.title ?? null,
-        body: r.review_content?.comment ?? r.comment ?? r.body ?? "",
-        customerName: r.user_name || "Verified Customer",
-        isVerifiedPurchase: Boolean(r.is_verified_buyer || r.order_id),
-        createdAt: r.created_at,
-        images: Array.isArray(r.image_urls) ? r.image_urls : [],
-        helpfulCount: r.helpful_count ?? 0,
-      }));
-  } catch (err) {
-    console.error("[ReviewsService] fetchProductReviews failed:", err);
-    return [];
-  }
-  */
-
   // Fetch product reviews directly from Supabase for PDP display
   try {
     const client = supabaseClient || createClient(config.supabaseUrl, config.supabaseAnonKey);
@@ -248,19 +220,7 @@ export async function fetchPendingReviews(
     return [];
   }
 
-  // 2. Fetch existing reviews to exclude already reviewed products (Commented out API GET request)
-  /*
-  let reviewedProductIds: Set<string> = new Set();
-  try {
-    const { data: reviewJson } = await api.get<{ reviews: any[] }>(`/api/v1/reviews/user/${user.id}`);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    reviewedProductIds = new Set((reviewJson.reviews ?? []).map((r: any) => r.product_id as string));
-  } catch {
-    // If review fetch fails, proceed with empty set
-  }
-  */
-
-  // Direct Supabase query to get reviewed product IDs
+  // 2. Fetch existing reviews to exclude already reviewed products
   let reviewedProductIds: Set<string> = new Set();
   const { data: userReviews, error: userReviewsError } = await supabase
     .from("reviews")
@@ -382,22 +342,7 @@ export async function checkCanUserReviewProduct(
     return { eligible: false, reason: 'NOT_PURCHASED' };
   }
 
-  // 2. Check if user already reviewed this product (Commented out API GET request)
-  /*
-  try {
-    const { data: reviewJson } = await api.get<{ reviews: any[] }>(`/api/v1/reviews/user/${userId}`);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const alreadyReviewed = (reviewJson.reviews ?? []).some((r: any) => r.product_id === productId);
-
-    if (alreadyReviewed) {
-      return { eligible: false, reason: 'ALREADY_REVIEWED', orderId: matchingOrderId };
-    }
-  } catch (err) {
-    console.error("[ReviewsService] checkCanUserReviewProduct review check failed:", err);
-  }
-  */
-
-  // Direct Supabase query to check if user already reviewed this product
+  // 2. Check if user already reviewed this product
   try {
     const { data: existingReview, error: existingReviewError } = await supabase
       .from("reviews")

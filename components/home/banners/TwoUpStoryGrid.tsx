@@ -10,7 +10,7 @@ export default async function TwoUpStoryGrid() {
     <section aria-label="Featured Collection" className="w-full">
       <div className="w-full px-4 md:px-6 lg:px-8 pb-1 max-w-[1920px] mx-auto">
         <ClientLink
-          href={banner?.buttonHref || "/collection/rudraksha"}
+          href={banner?.buttonHref || "/collection/all?mukhi=all_mukhi"}
           className="group relative flex h-[180px] sm:h-[200px] md:h-[240px] w-full flex-col justify-between overflow-hidden rounded-[16px] bg-[#e5e0da] p-5 transition-transform duration-300 hover:scale-[1.005] active:scale-[0.99] shadow-sm"
         >
           {/* Background image & overlay */}

@@ -47,8 +47,7 @@ type Position = {
   left: number;
   width: number;
   maxHeight: number;
-  top?: number;
-  bottom?: number;
+  top: number;
 };
 
 /**
@@ -128,39 +127,60 @@ export default function Select({
     if (!trigger) return;
 
     const rect = trigger.getBoundingClientRect();
-    const viewportHeight = window.innerHeight;
-    const viewportWidth = document.documentElement.clientWidth;
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    const viewportHeight = vv ? vv.height : window.innerHeight;
+    const viewportWidth = vv ? vv.width : document.documentElement.clientWidth;
+    const viewportTop = vv ? vv.offsetTop : 0;
+    const viewportLeft = vv ? vv.offsetLeft : 0;
 
-    // Flip above the trigger when there is not enough room below it.
-    const spaceBelow = viewportHeight - rect.bottom - GAP - VIEWPORT_MARGIN_BOTTOM;
-    const spaceAbove = rect.top - GAP - VIEWPORT_MARGIN;
-    const dropUp = spaceBelow < MIN_MENU_HEIGHT && spaceAbove > spaceBelow;
+    // Trigger coordinates relative to visible viewport
+    const triggerTop = rect.top - viewportTop;
+    const triggerBottom = rect.bottom - viewportTop;
+    const triggerLeft = rect.left - viewportLeft;
+
+    // Available space above and below the trigger
+    const spaceBelow = viewportHeight - triggerBottom - GAP - VIEWPORT_MARGIN_BOTTOM;
+    const spaceAbove = triggerTop - GAP - VIEWPORT_MARGIN;
+
+    // Drop up if space below cannot fit full menu and there is more space above,
+    // or if space below is smaller than MIN_MENU_HEIGHT
+    const dropUp = (spaceBelow < MAX_MENU_HEIGHT && spaceAbove > spaceBelow) || spaceBelow < MIN_MENU_HEIGHT;
     const available = Math.max(dropUp ? spaceAbove : spaceBelow, MIN_MENU_HEIGHT);
+    const maxHeight = Math.min(MAX_MENU_HEIGHT, Math.max(MIN_MENU_HEIGHT, available));
 
-    // Never narrower than the trigger, never wider than the viewport, and
-    // always nudged back inside if anchoring would push it off the edge.
-    const width = Math.min(
-      Math.max(rect.width, MIN_MENU_WIDTH),
-      viewportWidth - VIEWPORT_MARGIN * 2,
+    // Constrain width so it never spills past viewport margins
+    const targetWidth = Math.max(rect.width, Math.min(MIN_MENU_WIDTH, viewportWidth - VIEWPORT_MARGIN * 2));
+    const width = Math.min(targetWidth, viewportWidth - VIEWPORT_MARGIN * 2);
+
+    // Constrain horizontal position within viewport
+    const left = Math.max(
+      VIEWPORT_MARGIN + viewportLeft,
+      Math.min(triggerLeft + viewportLeft, viewportWidth + viewportLeft - width - VIEWPORT_MARGIN),
     );
-    const left = Math.min(
-      Math.max(rect.left, VIEWPORT_MARGIN),
-      viewportWidth - width - VIEWPORT_MARGIN,
-    );
+
+    // Calculate vertical top position ensuring it stays fully within the visible screen
+    let top: number;
+    if (dropUp) {
+      top = Math.max(VIEWPORT_MARGIN + viewportTop, triggerTop + viewportTop - maxHeight - GAP);
+    } else {
+      top = triggerBottom + viewportTop + GAP;
+    }
 
     setPosition({
       left,
       width,
-      maxHeight: Math.min(MAX_MENU_HEIGHT, available),
-      ...(dropUp
-        ? { bottom: viewportHeight - rect.top + GAP }
-        : { top: rect.bottom + GAP }),
+      top,
+      maxHeight,
     });
   }, [searchable]);
 
   useLayoutEffect(() => {
-    if (isOpen) updatePosition();
-  }, [isOpen, updatePosition]);
+    if (isOpen) {
+      updatePosition();
+      const trigger = searchable ? containerRef.current || comboRef.current : triggerRef.current;
+      trigger?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [isOpen, updatePosition, searchable]);
 
   // Follow the trigger while any ancestor scrolls or the viewport resizes.
   useEffect(() => {
@@ -168,9 +188,18 @@ export default function Select({
     const handle = () => updatePosition();
     window.addEventListener("scroll", handle, true);
     window.addEventListener("resize", handle);
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", handle);
+      vv.addEventListener("scroll", handle);
+    }
     return () => {
       window.removeEventListener("scroll", handle, true);
       window.removeEventListener("resize", handle);
+      if (vv) {
+        vv.removeEventListener("resize", handle);
+        vv.removeEventListener("scroll", handle);
+      }
     };
   }, [isOpen, updatePosition]);
 
@@ -316,7 +345,7 @@ export default function Select({
 
   const sharedTriggerClasses = [
     "flex w-full items-center justify-between gap-[8px] rounded-[12px] border bg-white",
-    "px-[16px] py-[14px] text-left text-[14px] font-['Montserrat'] transition-colors",
+    "px-[16px] py-[14px] text-left text-[16px] md:text-[14px] font-['Montserrat'] transition-colors",
     "outline-none cursor-pointer",
     "focus-visible:border-primary-orange focus-visible:ring-2 focus-visible:ring-[var(--color-primary-orange)]/25",
     invalid ? "border-red-400" : "border-border-strong",
@@ -338,7 +367,6 @@ export default function Select({
           left: position.left,
           width: position.width,
           top: position.top,
-          bottom: position.bottom,
           maxHeight: position.maxHeight,
         }}
         className="z-[99999] flex flex-col overflow-hidden rounded-[12px] border border-border-strong bg-white shadow-[0_12px_32px_rgba(33,30,26,0.16)] font-['Montserrat']"
@@ -436,7 +464,7 @@ export default function Select({
             }}
             onFocus={() => { if (!isOpen) openMenu(); }}
             onKeyDown={handleKeyDown}
-            className="min-w-0 flex-1 bg-transparent text-[14px] text-text-primary outline-none placeholder:text-text-muted"
+            className="min-w-0 flex-1 bg-transparent text-[16px] md:text-[14px] text-text-primary outline-none placeholder:text-text-muted"
             autoComplete="off"
           />
           <svg

@@ -178,7 +178,11 @@ function processRow(row: WishlistProductRow): ProcessedProduct {
     category: row.slug,
     variantId: cheapest?.id ?? "",
     variantSku: cheapest?.sku ?? "",
-    variantLabel: cheapest?.option1_value ?? "",
+    variantLabel: cheapest
+      ? [cheapest.option1_value, cheapest.option2_value, cheapest.option3_value]
+          .filter((v): v is string => Boolean(v && v !== "Default"))
+          .join(", ") || "One size"
+      : "",
     inventoryQuantity: cheapest?.inventory_quantity ?? null,
     lowStockThreshold: cheapest?.low_stock_threshold ?? 5,
     options,
@@ -203,17 +207,31 @@ const wishlistProductCache = new Map<string, ProcessedProduct>();
 
 export default function WishlistPage() {
   const router = useRouter();
-  // StoreRehydrator (root layout) is the single intentional hydration point.
-  // It runs before this component because it's a sibling rendered earlier in
-  // the tree, so wishlistIds are already populated by the time `hydrated`
-  // flips true — this only gates on hydration, it does NOT re-trigger it.
   const hydrated = useHasMounted();
-  const [status, setStatus] = useState<Status>("pending");
-  const [wishlistProducts, setWishlistProducts] = useState<ProcessedProduct[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<ProcessedProduct | null>(null);
   const { wishlistIds, removeFromWishlist, clearWishlist } = useWishlistStore();
   const addToCart = useCartStore((state) => state.addToCart);
 
+  const [wishlistProducts, setWishlistProducts] = useState<ProcessedProduct[]>(() => {
+    if (typeof window === "undefined") return [];
+    const validIds = useWishlistStore.getState().wishlistIds.filter(isUUID);
+    const hasAll = validIds.every((id) => wishlistProductCache.has(id));
+    if (hasAll && validIds.length > 0) {
+      return validIds
+        .map((id) => wishlistProductCache.get(id))
+        .filter((p): p is ProcessedProduct => Boolean(p));
+    }
+    return [];
+  });
+
+  const [status, setStatus] = useState<Status>(() => {
+    if (typeof window === "undefined") return "pending";
+    const validIds = useWishlistStore.getState().wishlistIds.filter(isUUID);
+    if (validIds.length === 0) return "done";
+    const hasAll = validIds.every((id) => wishlistProductCache.has(id));
+    return hasAll ? "done" : "loading";
+  });
+
+  const [selectedProduct, setSelectedProduct] = useState<ProcessedProduct | null>(null);
   const staleRef = useRef(false);
 
 
@@ -416,7 +434,7 @@ export default function WishlistPage() {
     }
   };
 
-  const showSkeleton = status !== "done";
+  const showSkeleton = !hydrated || status !== "done";
   const count = wishlistProducts.length;
 
   return (

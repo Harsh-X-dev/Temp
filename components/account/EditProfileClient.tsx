@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
-import { updateProfile } from "@/services/profile.service";
-import { createSupabaseBrowserClient } from "@/services/supabase/client";
-import { useAuthStore } from "@/store/auth.store";
+import { useAuth } from "@/hooks/useAuth";
 import DatePickerDropdown from "@/components/ui/inputs/DatePickerDropdown";
 import GenderDropdown from "@/components/ui/inputs/GenderDropdown";
 
@@ -41,11 +39,33 @@ function formatInitialGender(val?: string): string {
   return val;
 }
 
+function CameraIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+      <circle cx="12" cy="13" r="3" />
+    </svg>
+  );
+}
 
 export default function EditProfileClient({ initialProfile }: EditProfileClientProps) {
-  const setProfile = useAuthStore((state) => state.setProfile);
+  const { updateProfile, uploadAvatar, removeAvatar } = useAuth();
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [loading, setLoading] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(
+    initialProfile?.avatar_url || null
+  );
 
   const [formData, setFormData] = useState({
     full_name: initialProfile?.full_name || "",
@@ -62,31 +82,39 @@ export default function EditProfileClient({ initialProfile }: EditProfileClientP
     }));
   };
 
-  const handleDobChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value;
-    // @ts-ignore - nativeEvent exists on ChangeEvent but TS might not infer inputType
-    const isDeleting = e.nativeEvent?.inputType === "deleteContentBackward";
+  const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    if (!isDeleting) {
-      val = val.replace(/\D/g, ""); // strip non-digits
-      if (val.length > 2 && val.length <= 4) {
-        val = `${val.slice(0, 2)}/${val.slice(2)}`;
-      } else if (val.length > 4) {
-        val = `${val.slice(0, 2)}/${val.slice(2, 4)}/${val.slice(4, 8)}`;
-      } else if (val.length === 2) {
-        val = `${val}/`;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Invalid file", "Please select an image file (PNG, JPG, WEBP).");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large", "Image size must be less than 5MB.");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const publicUrl = await uploadAvatar(file);
+      setAvatarUrl(publicUrl);
+      toast.success("Photo selected", "Click 'Save Changes' to apply updates to your profile.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to upload photo";
+      toast.error("Upload failed", message);
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
       }
     }
-
-    setFormData((prev) => ({ ...prev, dob: val }));
   };
 
-  const handleNativeDateSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value; // YYYY-MM-DD format
-    if (val) {
-      const [y, m, d] = val.split("-");
-      setFormData((prev) => ({ ...prev, dob: `${d}/${m}/${y}` }));
-    }
+  const handleRemoveAvatar = () => {
+    setAvatarUrl(null);
+    toast.info("Photo removed", "Click 'Save Changes' to apply updates to your profile.");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,25 +122,13 @@ export default function EditProfileClient({ initialProfile }: EditProfileClientP
     setLoading(true);
 
     try {
-      const supabase = createSupabaseBrowserClient();
-      const result = await updateProfile(supabase, {
+      const result = await updateProfile({
         fullName: formData.full_name,
         dob: formData.dob,
         gender: formData.gender,
+        avatarUrl: avatarUrl,
       });
-      
-      
-      // Update the global auth store so the rest of the app (like the Profile page) sees the changes immediately
-      const currentProfile = useAuthStore.getState().profile;
-      if (currentProfile) {
-        setProfile({
-          ...currentProfile,
-          fullName: formData.full_name,
-          dob: formData.dob,
-          gender: formData.gender,
-          updatedAt: new Date().toISOString(),
-        });
-      }
+
       toast.success("Profile updated", result.message || "Profile updated successfully");
       router.push("/profile");
     } catch (err: unknown) {
@@ -128,20 +144,70 @@ export default function EditProfileClient({ initialProfile }: EditProfileClientP
       {/* Profile Photo Container */}
       <div className="flex flex-col items-center w-full">
         <div className="relative w-[100px] h-[100px]">
-          <div className="w-[100px] h-[100px] rounded-full overflow-hidden border border-border-strong">
-            {/* Fallback avatar image or Initials */}
-            {initialProfile?.avatar_url ? (
+          <div className="w-[100px] h-[100px] rounded-full overflow-hidden border-2 border-border-strong relative bg-surface-neutral shadow-sm">
+            {avatarUrl ? (
               <img
-                src={initialProfile.avatar_url}
+                src={avatarUrl}
                 alt="User Avatar"
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full bg-surface-neutral flex items-center justify-center text-primary-orange text-[36px] font-bold font-['Montserrat'] uppercase">
-                {initialProfile?.full_name?.charAt(0) || initialProfile?.email?.charAt(0) || "U"}
+              <div className="w-full h-full flex items-center justify-center text-primary-orange text-[36px] font-bold font-['Montserrat'] uppercase">
+                {formData.full_name?.charAt(0) || initialProfile?.email?.charAt(0) || "U"}
+              </div>
+            )}
+
+            {uploadingAvatar && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-full">
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
               </div>
             )}
           </div>
+
+          {/* Camera / Edit Badge Button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingAvatar}
+            className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary-orange text-white flex items-center justify-center shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer border-2 border-white disabled:opacity-50"
+            title={avatarUrl ? "Change photo" : "Add photo"}
+            aria-label={avatarUrl ? "Change profile photo" : "Add profile photo"}
+          >
+            <CameraIcon className="w-4 h-4" />
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            onChange={handleAvatarSelect}
+            className="hidden"
+          />
+        </div>
+
+        {/* Change / Remove Action Links */}
+        <div className="flex items-center gap-3 mt-2.5 text-[12px] font-medium font-['Montserrat']">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingAvatar}
+            className="text-primary-orange hover:underline cursor-pointer disabled:opacity-50 font-semibold"
+          >
+            {avatarUrl ? "Change Photo" : "Add Photo"}
+          </button>
+          {avatarUrl && (
+            <>
+              <span className="text-text-muted select-none">•</span>
+              <button
+                type="button"
+                onClick={handleRemoveAvatar}
+                disabled={uploadingAvatar}
+                className="text-red-500 hover:underline cursor-pointer disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </>
+          )}
         </div>
       </div>
 

@@ -28,6 +28,7 @@ import { validateCouponApi } from '@/services/coupon.service';
 import CartItemRow from './CartItemRow';
 import EmptyCartState from './EmptyCartState';
 import BackButton from '@/components/ui/buttons/BackButton';
+import CartSkeleton from '@/components/cart/CartSkeleton';
 import { toast } from '@/lib/toast';
 
 export default function CartPage() {
@@ -36,7 +37,7 @@ export default function CartPage() {
   const searchParams = useSearchParams();
   const productSlug = searchParams.get('product');
   const isBuyNow = Boolean(productSlug);
-  const [isReconstructing, setIsReconstructing] = useState(false);
+  const [isReconstructing, setIsReconstructing] = useState(() => Boolean(isBuyNow && useCheckoutStore.getState().items.length === 0));
 
   const cartItems = useCartStore((state) => state.items);
   const cartSubtotal = useCartStore((state) => state.cartSubtotal);
@@ -245,9 +246,19 @@ export default function CartPage() {
       return;
     }
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const validItems = items.filter((i) => {
+      const cleanId = i.variantId ? i.variantId.replace('-energized', '') : '';
+      return uuidRegex.test(cleanId);
+    });
+
+    if (validItems.length === 0) {
+      return;
+    }
+
     let isSubscribed = true;
     calculateCheckoutPricesApi({
-      items: items.map((i) => ({
+      items: validItems.map((i) => ({
         variant_id: i.variantId ? i.variantId.replace('-energized', '') : i.variantId,
         quantity: i.quantity,
         is_energization_addon: Boolean((i as any).isEnergized || i.variantId?.includes?.('-energized')),
@@ -280,8 +291,15 @@ export default function CartPage() {
   const couponDiscount = isServerCalcSynced && calculationData
     ? calculationData.discount_amount
     : (selectedCoupon ? calculateCouponDiscount(selectedCoupon, subtotal) : 0);
-  const shippingAmount = calculationData?.shipping_amount ?? 0;
-  const gst = calculationData?.tax_amount ?? 0;
+  const isFreeShipping = Boolean(
+    selectedCoupon?.isFreeShipping ||
+    selectedCoupon?.discountType === "free_shipping" ||
+    subtotal >= 999
+  );
+  const shippingAmount = isServerCalcSynced && calculationData
+    ? calculationData.shipping_amount
+    : (isFreeShipping ? 0 : 99);
+  const gst = isServerCalcSynced && calculationData ? calculationData.tax_amount : 0;
   const grandTotal = isServerCalcSynced && calculationData
     ? calculationData.total
     : Math.max(0, subtotal - couponDiscount + shippingAmount + gst);
@@ -407,42 +425,8 @@ export default function CartPage() {
   }, []);
 
   // ── Render guards ───────────────────────────────────────────────────
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-[#fbf8f4] flex flex-col items-center w-full font-['Montserrat']">
-        <div className="w-full max-w-full md:max-w-[480px] mx-auto min-h-screen flex flex-col bg-[#fbf8f4] relative md:border-x md:border-[#e5e0da]">
-          <header className="sticky top-0 z-20 w-full bg-white border-b border-[#e5e0da] h-[56px] px-[16px] flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-[12px]">
-              <div className="size-[28px] rounded-full animate-shimmer" />
-              <div className="h-5 w-24 rounded animate-shimmer" />
-            </div>
-          </header>
-          <div className="p-4 flex flex-col gap-4">
-            <div className="h-[76px] w-full rounded-[16px] border border-[#e5e0da] bg-white p-4 animate-shimmer" />
-            <div className="flex gap-3 rounded-[16px] border border-[#e5e0da] bg-white p-4">
-              <div className="size-[72px] rounded-[12px] animate-shimmer shrink-0" />
-              <div className="flex-1 flex flex-col gap-2">
-                <div className="h-4 w-3/4 rounded animate-shimmer" />
-                <div className="h-3 w-1/2 rounded animate-shimmer" />
-                <div className="h-5 w-20 rounded animate-shimmer mt-2" />
-              </div>
-            </div>
-            <div className="h-[180px] w-full rounded-[16px] border border-[#e5e0da] bg-white p-4 animate-shimmer" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isBuyNow && isReconstructing && items.length === 0) {
-    return (
-      <div className="flex flex-col w-full max-w-lg mx-auto min-h-[60vh] items-center justify-center bg-white">
-        <div className="animate-pulse flex flex-col items-center gap-3">
-          <div className="h-6 w-40 bg-surface-neutral rounded-full" />
-          <div className="h-4 w-28 bg-surface-neutral rounded-full" />
-        </div>
-      </div>
-    );
+  if (!mounted || (isBuyNow && (isReconstructing || items.length === 0))) {
+    return <CartSkeleton isBuyNow={isBuyNow} />;
   }
 
   const itemCount = items.reduce((total, item) => total + item.quantity, 0);

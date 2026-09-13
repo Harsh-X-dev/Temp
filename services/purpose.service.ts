@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/services/supabase/server";
 import type { Product } from "@/types/shared.types";
 
@@ -224,53 +225,111 @@ function formatPrice(price: number): string {
   return `₹${price.toLocaleString("en-IN")}`;
 }
 
+const getCachedActivePurposes = unstable_cache(
+  async (): Promise<PurposeSummary[]> => {
+    try {
+      const supabase = createSupabaseServerClient();
+      const { data, error } = await supabase
+        .from("purposes")
+        .select("*");
+
+      if (!error && data && data.length > 0) {
+        return data
+          .filter((row: any) => row.is_active !== false && row.active !== false && row.status !== "inactive")
+          .map((row: any) => {
+            const slug = String(row.slug || "").toLowerCase().trim();
+            const fallbackConfig = DEFAULT_PURPOSES[slug];
+            const title = row.title || row.name || fallbackConfig?.name || slug;
+            const subtitle =
+              row.subtitle ||
+              row.description ||
+              fallbackConfig?.headline ||
+              `Rudraksha for ${title}`;
+            const imageUrl = row.image_url || row.icon_url || fallbackConfig?.bannerImage || "";
+
+            return {
+              id: String(row.id || slug),
+              title,
+              subtitle,
+              slug,
+              imageUrl,
+              isActive: true,
+              sortOrder: typeof row.sort_order === "number" ? row.sort_order : 0,
+            };
+          })
+          .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      }
+
+      if (error) {
+        console.warn("[PurposeService] Supabase purposes query returned error:", error.message);
+      }
+    } catch (err) {
+      console.error("Error fetching active purposes from Supabase:", err);
+    }
+
+    return DEFAULT_ACTIVE_PURPOSES.filter((p) => p.isActive !== false);
+  },
+  ["active-purposes-list"],
+  { revalidate: 3600, tags: ["purposes"] }
+);
+
 /**
  * Fetches all active purposes from Supabase database (`is_active = true` / `active = true`).
  * Non-active purposes are strictly filtered out.
  */
 export const getActivePurposes = cache(async function getActivePurposes(): Promise<PurposeSummary[]> {
-  try {
-    const supabase = createSupabaseServerClient();
-    const { data, error } = await supabase
-      .from("purposes")
-      .select("*");
-
-    if (!error && data && data.length > 0) {
-      return data
-        .filter((row: any) => row.is_active !== false && row.active !== false && row.status !== "inactive")
-        .map((row: any) => {
-          const slug = String(row.slug || "").toLowerCase().trim();
-          const fallbackConfig = DEFAULT_PURPOSES[slug];
-          const title = row.title || row.name || fallbackConfig?.name || slug;
-          const subtitle =
-            row.subtitle ||
-            row.description ||
-            fallbackConfig?.headline ||
-            `Rudraksha for ${title}`;
-          const imageUrl = row.image_url || row.icon_url || fallbackConfig?.bannerImage || "";
-
-          return {
-            id: String(row.id || slug),
-            title,
-            subtitle,
-            slug,
-            imageUrl,
-            isActive: true,
-            sortOrder: typeof row.sort_order === "number" ? row.sort_order : 0,
-          };
-        })
-        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-    }
-
-    if (error) {
-      console.warn("[PurposeService] Supabase purposes query returned error:", error.message);
-    }
-  } catch (err) {
-    console.error("Error fetching active purposes from Supabase:", err);
-  }
-
-  return DEFAULT_ACTIVE_PURPOSES.filter((p) => p.isActive !== false);
+  return await getCachedActivePurposes();
 });
+
+const getCachedPurposeDetails = unstable_cache(
+  async (slug: string): Promise<PurposeDetail> => {
+    const normalizedSlug = slug.toLowerCase().trim();
+    const supabase = createSupabaseServerClient();
+
+    const { data: dbPurpose } = await supabase
+      .from("purposes")
+      .select("*")
+      .ilike("slug", normalizedSlug)
+      .single();
+
+    const defaultConfig = DEFAULT_PURPOSES[normalizedSlug] || {
+      name: slug.charAt(0).toUpperCase() + slug.slice(1),
+      headline: `Rudraksha & Gemstones for ${slug.charAt(0).toUpperCase() + slug.slice(1)}`,
+      description:
+        "Authentic, lab-certified and energized Himalayan gemstones and sacred rudraksha beads curated specifically for your intention.",
+      bannerImage: "/assets/images/hero_section_new_arrival.png",
+    };
+
+    const name =
+      (dbPurpose as any)?.title ||
+      (dbPurpose as any)?.name ||
+      defaultConfig.name;
+
+    const headline =
+      (dbPurpose as any)?.subtitle ||
+      (dbPurpose as any)?.headline ||
+      defaultConfig.headline;
+
+    const description =
+      dbPurpose?.description ||
+      defaultConfig.description;
+
+    const bannerImage =
+      (dbPurpose as any)?.image_url ||
+      defaultConfig.bannerImage;
+
+    return {
+      id: dbPurpose?.id || normalizedSlug,
+      name,
+      slug: dbPurpose?.slug || normalizedSlug,
+      headline,
+      description,
+      bannerImage,
+    };
+  },
+  ["purpose-detail-by-slug"],
+  { revalidate: 3600, tags: ["purposes"] }
+);
 
 /**
  * Fetches purpose metadata by slug from Supabase, matching purposes table schema.
@@ -278,50 +337,117 @@ export const getActivePurposes = cache(async function getActivePurposes(): Promi
 export const getPurposeDetails = cache(async function getPurposeDetails(
   slug: string
 ): Promise<PurposeDetail> {
-  const normalizedSlug = slug.toLowerCase().trim();
-  const supabase = createSupabaseServerClient();
-
-  const { data: dbPurpose } = await supabase
-    .from("purposes")
-    .select("*")
-    .ilike("slug", normalizedSlug)
-    .single();
-
-  const defaultConfig = DEFAULT_PURPOSES[normalizedSlug] || {
-    name: slug.charAt(0).toUpperCase() + slug.slice(1),
-    headline: `Rudraksha & Gemstones for ${slug.charAt(0).toUpperCase() + slug.slice(1)}`,
-    description:
-      "Authentic, lab-certified and energized Himalayan gemstones and sacred rudraksha beads curated specifically for your intention.",
-    bannerImage: "/assets/images/hero_section_new_arrival.png",
-  };
-
-  const name =
-    (dbPurpose as any)?.title ||
-    (dbPurpose as any)?.name ||
-    defaultConfig.name;
-
-  const headline =
-    (dbPurpose as any)?.subtitle ||
-    (dbPurpose as any)?.headline ||
-    defaultConfig.headline;
-
-  const description =
-    dbPurpose?.description ||
-    defaultConfig.description;
-
-  const bannerImage =
-    (dbPurpose as any)?.image_url ||
-    defaultConfig.bannerImage;
-
-  return {
-    id: dbPurpose?.id || normalizedSlug,
-    name,
-    slug: dbPurpose?.slug || normalizedSlug,
-    headline,
-    description,
-    bannerImage,
-  };
+  return await getCachedPurposeDetails(slug);
 });
+
+const getCachedProductsByPurposeSlug = unstable_cache(
+  async (slug: string): Promise<Product[]> => {
+    const normalizedSlug = slug.toLowerCase().trim();
+    const supabase = createSupabaseServerClient();
+
+    // 1. Check if purpose exists in purposes table
+    const { data: purposeRecord } = await supabase
+      .from("purposes")
+      .select("*")
+      .ilike("slug", normalizedSlug)
+      .single();
+
+    if (purposeRecord && (purposeRecord.is_active === false || purposeRecord.active === false || purposeRecord.status === "inactive")) {
+      return [];
+    }
+
+    if (purposeRecord?.id) {
+      // Try product_purposes join table
+      const { data: linkedRows1 } = await supabase
+        .from("product_purposes")
+        .select(`
+          products (
+            id,
+            title,
+            slug,
+            is_energized,
+            tags,
+            options,
+            attributes,
+            product_images ( url, position ),
+            product_variants ( id, sku, option1_value, option2_value, option3_value, price, compare_at_price, inventory_quantity, low_stock_threshold, is_active ),
+            reviews ( is_approved, review_content )
+          )
+        `)
+        .eq("purpose_id", purposeRecord.id);
+
+      if (linkedRows1 && linkedRows1.length > 0) {
+        const products = linkedRows1
+          .map((r: any) => r.products)
+          .filter(Boolean)
+          .map(mapDbRowToProduct);
+
+        if (products.length > 0) return products;
+      }
+
+      // Try products_purposes join table fallback
+      const { data: linkedRows2 } = await supabase
+        .from("products_purposes")
+        .select(`
+          products (
+            id,
+            title,
+            slug,
+            is_energized,
+            tags,
+            options,
+            attributes,
+            product_images ( url, position ),
+            product_variants ( id, sku, option1_value, option2_value, option3_value, price, compare_at_price, inventory_quantity, low_stock_threshold, is_active ),
+            reviews ( is_approved, review_content )
+          )
+        `)
+        .eq("purpose_id", purposeRecord.id);
+
+      if (linkedRows2 && linkedRows2.length > 0) {
+        const products = linkedRows2
+          .map((r: any) => r.products)
+          .filter(Boolean)
+          .map(mapDbRowToProduct);
+
+        if (products.length > 0) return products;
+      }
+    }
+
+    // 2. If join table has no rows for this purpose yet, query products matching tags or titles specifically
+    const keywords = PURPOSE_KEYWORDS[normalizedSlug] || [normalizedSlug];
+    const orFilters = keywords
+      .map((k) => `tags.cs.{${k}},title.ilike.%${k}%,description.ilike.%${k}%`)
+      .join(",");
+
+    const { data: matchingProducts } = await supabase
+      .from("products")
+      .select(`
+        id,
+        title,
+        slug,
+        is_energized,
+        tags,
+        options,
+        attributes,
+        product_images ( url, position ),
+        product_variants ( id, sku, option1_value, option2_value, option3_value, price, compare_at_price, inventory_quantity, low_stock_threshold, is_active ),
+        reviews ( is_approved, review_content )
+      `)
+      .eq("status", "active")
+      .or(orFilters)
+      .limit(20);
+
+    if (matchingProducts && matchingProducts.length > 0) {
+      return matchingProducts.map(mapDbRowToProduct);
+    }
+
+    // Strictly return empty array if no matching products exist for this purpose
+    return [];
+  },
+  ["products-by-purpose-slug"],
+  { revalidate: 3600, tags: ["purposes", "products"] }
+);
 
 /**
  * Fetches products associated with a specific purpose from Supabase database.
@@ -331,108 +457,7 @@ export const getPurposeDetails = cache(async function getPurposeDetails(
 export const getProductsByPurposeSlug = cache(async function getProductsByPurposeSlug(
   slug: string
 ): Promise<Product[]> {
-  const normalizedSlug = slug.toLowerCase().trim();
-  const supabase = createSupabaseServerClient();
-
-  // 1. Check if purpose exists in purposes table
-  const { data: purposeRecord } = await supabase
-    .from("purposes")
-    .select("*")
-    .ilike("slug", normalizedSlug)
-    .single();
-
-  if (purposeRecord && (purposeRecord.is_active === false || purposeRecord.active === false || purposeRecord.status === "inactive")) {
-    return [];
-  }
-
-  if (purposeRecord?.id) {
-    // Try product_purposes join table
-    const { data: linkedRows1 } = await supabase
-      .from("product_purposes")
-      .select(`
-        products (
-          id,
-          title,
-          slug,
-          is_energized,
-          tags,
-          options,
-          attributes,
-          product_images ( url, position ),
-          product_variants ( id, sku, option1_value, option2_value, option3_value, price, compare_at_price, inventory_quantity, low_stock_threshold, is_active ),
-          reviews ( is_approved, review_content )
-        )
-      `)
-      .eq("purpose_id", purposeRecord.id);
-
-    if (linkedRows1 && linkedRows1.length > 0) {
-      const products = linkedRows1
-        .map((r: any) => r.products)
-        .filter(Boolean)
-        .map(mapDbRowToProduct);
-
-      if (products.length > 0) return products;
-    }
-
-    // Try products_purposes join table fallback
-    const { data: linkedRows2 } = await supabase
-      .from("products_purposes")
-      .select(`
-        products (
-          id,
-          title,
-          slug,
-          is_energized,
-          tags,
-          options,
-          attributes,
-          product_images ( url, position ),
-          product_variants ( id, sku, option1_value, option2_value, option3_value, price, compare_at_price, inventory_quantity, low_stock_threshold, is_active ),
-          reviews ( is_approved, review_content )
-        )
-      `)
-      .eq("purpose_id", purposeRecord.id);
-
-    if (linkedRows2 && linkedRows2.length > 0) {
-      const products = linkedRows2
-        .map((r: any) => r.products)
-        .filter(Boolean)
-        .map(mapDbRowToProduct);
-
-      if (products.length > 0) return products;
-    }
-  }
-
-  // 2. If join table has no rows for this purpose yet, query products matching tags or titles specifically
-  const keywords = PURPOSE_KEYWORDS[normalizedSlug] || [normalizedSlug];
-  const orFilters = keywords
-    .map((k) => `tags.cs.{${k}},title.ilike.%${k}%,description.ilike.%${k}%`)
-    .join(",");
-
-  const { data: matchingProducts } = await supabase
-    .from("products")
-    .select(`
-      id,
-      title,
-      slug,
-      is_energized,
-      tags,
-      options,
-      attributes,
-      product_images ( url, position ),
-      product_variants ( id, sku, option1_value, option2_value, option3_value, price, compare_at_price, inventory_quantity, low_stock_threshold, is_active ),
-      reviews ( is_approved, review_content )
-    `)
-    .eq("status", "active")
-    .or(orFilters)
-    .limit(20);
-
-  if (matchingProducts && matchingProducts.length > 0) {
-    return matchingProducts.map(mapDbRowToProduct);
-  }
-
-  // Strictly return empty array if no matching products exist for this purpose
-  return [];
+  return await getCachedProductsByPurposeSlug(slug);
 });
 
 function mapDbRowToProduct(row: any): Product {

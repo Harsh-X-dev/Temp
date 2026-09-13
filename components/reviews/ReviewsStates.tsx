@@ -15,7 +15,7 @@ export function ReviewsSkeleton() {
       </div>
 
       {/* Card Skeletons */}
-      {[...Array(3)].map((_, i) => (
+      {[...Array(5)].map((_, i) => (
         <div key={i} className="rounded-[12px] border border-border-strong bg-white p-[16px] w-full">
           <div className="flex items-center gap-3">
             <div className="size-[54px] rounded-[12px] animate-shimmer shrink-0" />

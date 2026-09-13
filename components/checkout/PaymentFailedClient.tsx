@@ -11,6 +11,7 @@ import RazorpayCheckout, { useRazorpayCheckout } from '@/components/payment/Razo
 import { calculateCouponDiscount } from '@/services/checkout.service';
 import type { BillBreakdown } from '@/types/checkout.types';
 import { isBusy } from '@/components/payment/PaymentStatus';
+import { isSyntheticEmail } from '@/lib/validators';
 
 /**
  * PaymentFailedClient — Matches Figma node 1304-15600.
@@ -119,7 +120,15 @@ export default function PaymentFailedClient() {
     selectedCoupon,
     bill: baseBill,
     source: (source || 'cart') as 'cart' | 'buy-now',
-    user: user ? { name: user.user_metadata?.full_name ?? '', email: user.email ?? '' } : null,
+    user: user
+      ? {
+          name: user.user_metadata?.full_name ?? '',
+          email:
+            profile?.email && !isSyntheticEmail(profile.email)
+              ? profile.email
+              : '',
+        }
+      : null,
     rawUser: user,
     profile,
     address: selectedAddress,

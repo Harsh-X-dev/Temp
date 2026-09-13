@@ -100,6 +100,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 // JSON-LD Structured Data Schema for Organization & OnlineStore
@@ -171,11 +172,6 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
           <ToastProvider />
           {children}
         </AuthProvider>
-        <Script
-          id="global-razorpay-checkout-js"
-          src="https://checkout.razorpay.com/v1/checkout.js"
-          strategy="afterInteractive"
-        />
       </body>
     </html>
   );

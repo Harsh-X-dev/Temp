@@ -1,5 +1,7 @@
-'use client';
+"use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from 'next/link';
 import Image from 'next/image';
 import BackButton from '@/components/ui/buttons/BackButton';
@@ -8,13 +10,19 @@ import WishlistButton from '@/components/ui/buttons/WishlistButton';
 import { assets } from '@/lib/assets';
 
 export default function TopNavigation() {
+  const router = useRouter();
+
+  // Instant prefetch of the shop collection page for 0ms transitions
+  useEffect(() => {
+    router.prefetch('/collection/all');
+  }, [router]);
   return (
     <>
       <header className="fixed top-0 inset-x-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-border-strong shadow-xs">
         <div className="flex h-[56px] md:h-[64px] items-center justify-between px-4 sm:px-6 md:px-8 w-full max-w-7xl mx-auto relative">
-          {/* Left: Back Button */}
+          {/* Left: Back Button to Shop page */}
           <div className="flex items-center z-10">
-            <BackButton className="size-8 md:size-9" />
+            <BackButton href="/collection/all" className="size-8 md:size-9" />
           </div>
 
           {/* Center: Logo */}

@@ -8,6 +8,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { navItems } from "@/lib/navigation";
 import { NavIcon } from "./NavIcon";
 import { useWishlistStore } from "@/store/wishlist.store";
+import { useAuthStore } from "@/store/auth.store";
 
 /**
  * Returns true when the given nav href is "active" for the current pathname.
@@ -27,9 +28,15 @@ export default function BottomNav() {
 
   useEffect(() => {
     if (!mounted) return;
+    const isAuthenticated = useAuthStore.getState().isAuthenticated;
     navItems.forEach((item) => {
       try {
-        router.prefetch(item.href);
+        if (item.href === "/profile" && !isAuthenticated) {
+          // Avoid triggering server redirect to /login?redirectTo=/profile
+          router.prefetch("/login");
+        } else {
+          router.prefetch(item.href);
+        }
       } catch {}
     });
   }, [mounted, router]);
@@ -84,10 +91,13 @@ export default function BottomNav() {
         <div className="relative mx-auto flex max-w-lg items-center justify-between px-6 pt-2.5 pb-1">
           {navItems.map((item) => {
             const active = isNavActive(item.href, pathname);
+            const isProfile = item.href === "/profile";
+            const isAuthenticated = useAuthStore.getState().isAuthenticated;
             return (
               <ClientLink
                 key={item.id}
                 href={item.href}
+                prefetch={isProfile ? isAuthenticated : true}
                 aria-label={item.label}
                 aria-current={active ? "page" : undefined}
                 className={`flex flex-col items-center justify-center gap-1 min-w-[64px] transition-colors cursor-pointer ${

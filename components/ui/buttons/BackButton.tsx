@@ -49,7 +49,7 @@ export default function BackButton({ href, className, onClick, variant = "defaul
 
   if (href) {
     return (
-      <Link href={href} className={baseClasses} aria-label="Go back">
+      <Link href={href} prefetch={true} className={baseClasses} aria-label="Go back">
         {icon}
       </Link>
     );

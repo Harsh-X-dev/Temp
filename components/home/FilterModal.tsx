@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useId } from "react";
+import { useEffect, useState, useRef, useId } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useHasMounted } from "@/hooks/useHasMounted";
@@ -52,29 +52,72 @@ export default function FilterModal({
   const [selectedMukhi, setSelectedMukhi] = useState<string[]>([]);
   const [selectedOrigins, setSelectedOrigins] = useState<string[]>([]);
   const [selectedRating, setSelectedRating] = useState<string>("");
-  const [inStockOnly, setInStockOnly] = useState<boolean>(false);
 
-  // Sync state from current URL params when opened
+  const prevIsOpenRef = useRef(false);
+
+  // Sync state only when modal opens
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       const min = parseInt(searchParams.get("minPrice") || `${minLimit}`, 10);
       const max = parseInt(searchParams.get("maxPrice") || `${maxLimit}`, 10);
       setMinPrice(isNaN(min) ? minLimit : min);
       setMaxPrice(isNaN(max) ? maxLimit : max);
 
+      // 1. Types (Category)
       const typesParam = searchParams.get("types");
-      setSelectedTypes(typesParam ? typesParam.split(",").filter(Boolean) : []);
+      if (typesParam) {
+        setSelectedTypes(typesParam.split(",").map((t) => t.trim()).filter(Boolean));
+      } else if (currentSlug && currentSlug !== "all" && !currentSlug.toLowerCase().includes("mukhi")) {
+        // Find matching category label from categories or fallback formatted slug
+        const matchedCategory = categories.find(
+          (c) =>
+            (c.id || "").toLowerCase() === currentSlug.toLowerCase() ||
+            (c.label || "").toLowerCase() === currentSlug.toLowerCase() ||
+            (c.id || "").toLowerCase() === currentSlug.toLowerCase().replace(/s$/, "") ||
+            currentSlug.toLowerCase() === (c.id || "").toLowerCase() + "s"
+        );
+        const targetLabel = matchedCategory
+          ? matchedCategory.label
+          : currentSlug.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
 
+        // Check if gemstoneTypes has exact match or matching label
+        const matchedInGemstoneTypes = gemstoneTypes.find(
+          (g) => g.toLowerCase() === targetLabel.toLowerCase() || g.toLowerCase() === currentSlug.toLowerCase()
+        );
+
+        setSelectedTypes([matchedInGemstoneTypes || targetLabel]);
+      } else {
+        setSelectedTypes([]);
+      }
+
+      // 2. Mukhi Types
       const mukhiParam = searchParams.get("mukhi");
-      setSelectedMukhi(mukhiParam ? mukhiParam.split(",").filter(Boolean) : []);
+      if (mukhiParam) {
+        if (
+          mukhiParam.toLowerCase() === "all_mukhi" ||
+          mukhiParam.toLowerCase() === "all" ||
+          mukhiParam.toLowerCase() === "mukhi" ||
+          mukhiParam.toLowerCase() === "mukhi-series" ||
+          mukhiParam.toLowerCase() === "mukhi_series"
+        ) {
+          setSelectedMukhi([...mukhiTypes]);
+        } else {
+          setSelectedMukhi(mukhiParam.split(",").map((t) => t.trim()).filter(Boolean));
+        }
+      } else if (currentSlug && currentSlug.toLowerCase().includes("mukhi")) {
+        // Automatically pre-select all available mukhi chips on mukhi-series collection pages
+        setSelectedMukhi([...mukhiTypes]);
+      } else {
+        setSelectedMukhi([]);
+      }
 
       const originParam = searchParams.get("origin");
       setSelectedOrigins(originParam ? originParam.split(",").filter(Boolean) : []);
 
       setSelectedRating(searchParams.get("rating") || "");
-      setInStockOnly(searchParams.get("inStock") === "true");
     }
-  }, [isOpen, searchParams, minLimit, maxLimit]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, searchParams, minLimit, maxLimit, currentSlug, categories, gemstoneTypes, mukhiTypes]);
 
   // Lock body & html scroll completely when modal is open to prevent background scrolling
   useEffect(() => {
@@ -102,10 +145,23 @@ export default function FilterModal({
     return () => window.removeEventListener("keydown", handleEsc);
   }, [isOpen, onClose]);
 
-  // Toggle array item helper
+  // Toggle array item helper (case-insensitive & singular/plural tolerant)
   const toggleArrayItem = (list: string[], item: string, setter: (val: string[]) => void) => {
-    if (list.includes(item)) {
-      setter(list.filter((x) => x !== item));
+    const isPresent = list.some(
+      (x) =>
+        x.toLowerCase() === item.toLowerCase() ||
+        x.toLowerCase() === item.toLowerCase().replace(/s$/, "") ||
+        item.toLowerCase() === x.toLowerCase().replace(/s$/, "")
+    );
+    if (isPresent) {
+      setter(
+        list.filter(
+          (x) =>
+            x.toLowerCase() !== item.toLowerCase() &&
+            x.toLowerCase() !== item.toLowerCase().replace(/s$/, "") &&
+            item.toLowerCase() !== x.toLowerCase().replace(/s$/, "")
+        )
+      );
     } else {
       setter([...list, item]);
     }
@@ -119,7 +175,6 @@ export default function FilterModal({
     setSelectedMukhi([]);
     setSelectedOrigins([]);
     setSelectedRating("");
-    setInStockOnly(false);
   };
 
   // Apply filters and push to URL
@@ -136,12 +191,6 @@ export default function FilterModal({
       params.set("maxPrice", maxPrice.toString());
     } else {
       params.delete("maxPrice");
-    }
-
-    if (selectedTypes.length > 0) {
-      params.set("types", selectedTypes.join(","));
-    } else {
-      params.delete("types");
     }
 
     if (selectedMukhi.length > 0) {
@@ -162,14 +211,54 @@ export default function FilterModal({
       params.delete("rating");
     }
 
-    if (inStockOnly) {
-      params.set("inStock", "true");
+    // Always delete legacy inStock parameter
+    params.delete("inStock");
+
+    let targetPath = pathname;
+
+    if (pathname.startsWith("/collection")) {
+      const isMukhiPage = currentSlug.toLowerCase().includes("mukhi");
+
+      if (selectedTypes.length === 0 && (selectedMukhi.length === 0 || (isMukhiPage && selectedMukhi.length === 0))) {
+        // User deselected all categories / mukhi -> Navigate to All Products
+        targetPath = "/collection/all";
+        params.delete("types");
+        params.delete("mukhi");
+      } else if (selectedTypes.length === 1) {
+        const typeItem = selectedTypes[0];
+        const matchedCollection = categories.find(
+          (c) =>
+            (c.label || "").toLowerCase() === typeItem.toLowerCase() ||
+            (c.id || "").toLowerCase() === typeItem.toLowerCase() ||
+            (c.id || "").toLowerCase() === typeItem.toLowerCase().replace(/s$/, "") ||
+            typeItem.toLowerCase() === (c.id || "").toLowerCase() + "s"
+        );
+
+        if (matchedCollection && matchedCollection.id !== "all") {
+          targetPath = `/collection/${matchedCollection.id}`;
+          params.delete("types");
+        } else {
+          targetPath = "/collection/all";
+          params.set("types", typeItem);
+        }
+      } else if (selectedTypes.length > 1) {
+        targetPath = "/collection/all";
+        params.set("types", selectedTypes.join(","));
+      } else if (isMukhiPage && selectedMukhi.length === 0) {
+        targetPath = "/collection/all";
+        params.delete("types");
+        params.delete("mukhi");
+      }
     } else {
-      params.delete("inStock");
+      if (selectedTypes.length > 0) {
+        params.set("types", selectedTypes.join(","));
+      } else {
+        params.delete("types");
+      }
     }
 
     const queryString = params.toString() ? `?${params.toString()}` : "";
-    router.push(`${pathname}${queryString}`);
+    router.push(`${targetPath}${queryString}`);
     onClose();
   };
 
@@ -304,25 +393,34 @@ export default function FilterModal({
               <span className="text-[14px] font-bold text-[#1c1917]">
                 Category
               </span>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {gemstoneTypes.map((type) => {
-                  const isSelected = selectedTypes.includes(type);
+                  const isSelected = selectedTypes.some((st) => {
+                    const cleanSt = st.toLowerCase().trim();
+                    const cleanType = type.toLowerCase().trim();
+                    return (
+                      cleanSt === cleanType ||
+                      cleanSt === cleanType.replace(/s$/, "") ||
+                      cleanType === cleanSt.replace(/s$/, "")
+                    );
+                  });
                   return (
                     <button
                       key={type}
                       type="button"
                       onClick={() => toggleArrayItem(selectedTypes, type, setSelectedTypes)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border text-[12px] transition-all cursor-pointer ${isSelected
-                          ? "bg-[#fff5ee] border-[#ff5400] text-[#ff5400] font-semibold shadow-xs"
-                          : "bg-white border-[#e7e2d8] text-[#1c1917] hover:border-[#78716c] font-normal"
-                        }`}
+                      className={`inline-flex items-center justify-center gap-1.5 h-[34px] px-3.5 rounded-full border text-[13px] font-medium transition-colors duration-75 cursor-pointer select-none ${
+                        isSelected
+                          ? "bg-[#fff5ee] border-[#ff5400] text-[#ff5400] shadow-2xs"
+                          : "bg-white border-[#e7e2d8] text-[#1c1917] hover:border-[#a8a29e]"
+                      }`}
                     >
                       {isSelected && (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[#ff5400]">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       )}
-                      <span>{type}</span>
+                      <span className="leading-none whitespace-nowrap">{type}</span>
                     </button>
                   );
                 })}
@@ -336,7 +434,7 @@ export default function FilterModal({
               <span className="text-[14px] font-bold text-[#1c1917]">
                 Mukhi Type
               </span>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {mukhiTypes.map((mukhi) => {
                   const isSelected = selectedMukhi.includes(mukhi);
                   return (
@@ -344,17 +442,18 @@ export default function FilterModal({
                       key={mukhi}
                       type="button"
                       onClick={() => toggleArrayItem(selectedMukhi, mukhi, setSelectedMukhi)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border text-[12px] transition-all cursor-pointer ${isSelected
-                          ? "bg-[#fff5ee] border-[#ff5400] text-[#ff5400] font-semibold shadow-xs"
-                          : "bg-white border-[#e7e2d8] text-[#1c1917] hover:border-[#78716c] font-normal"
-                        }`}
+                      className={`inline-flex items-center justify-center gap-1.5 h-[34px] px-3.5 rounded-full border text-[13px] font-medium transition-colors duration-75 cursor-pointer select-none ${
+                        isSelected
+                          ? "bg-[#fff5ee] border-[#ff5400] text-[#ff5400] shadow-2xs"
+                          : "bg-white border-[#e7e2d8] text-[#1c1917] hover:border-[#a8a29e]"
+                      }`}
                     >
                       {isSelected && (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[#ff5400]">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       )}
-                      <span>{mukhi}</span>
+                      <span className="leading-none whitespace-nowrap">{mukhi}</span>
                     </button>
                   );
                 })}
@@ -368,7 +467,7 @@ export default function FilterModal({
               <span className="text-[14px] font-bold text-[#1c1917]">
                 Origin
               </span>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {origins.map((origin) => {
                   const isSelected = selectedOrigins.includes(origin);
                   return (
@@ -376,17 +475,18 @@ export default function FilterModal({
                       key={origin}
                       type="button"
                       onClick={() => toggleArrayItem(selectedOrigins, origin, setSelectedOrigins)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border text-[12px] transition-all cursor-pointer ${isSelected
-                          ? "bg-[#fff5ee] border-[#ff5400] text-[#ff5400] font-semibold shadow-xs"
-                          : "bg-white border-[#e7e2d8] text-[#1c1917] hover:border-[#78716c] font-normal"
-                        }`}
+                      className={`inline-flex items-center justify-center gap-1.5 h-[34px] px-3.5 rounded-full border text-[13px] font-medium transition-colors duration-75 cursor-pointer select-none ${
+                        isSelected
+                          ? "bg-[#fff5ee] border-[#ff5400] text-[#ff5400] shadow-2xs"
+                          : "bg-white border-[#e7e2d8] text-[#1c1917] hover:border-[#a8a29e]"
+                      }`}
                     >
                       {isSelected && (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[#ff5400]">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       )}
-                      <span>{origin}</span>
+                      <span className="leading-none whitespace-nowrap">{origin}</span>
                     </button>
                   );
                 })}
@@ -399,7 +499,7 @@ export default function FilterModal({
             <span className="text-[14px] font-bold text-[#1c1917]">
               Rating
             </span>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {RATING_OPTIONS.map((opt) => {
                 const isSelected = selectedRating === opt.value;
                 return (
@@ -407,41 +507,22 @@ export default function FilterModal({
                     key={opt.value}
                     type="button"
                     onClick={() => setSelectedRating(isSelected ? "" : opt.value)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border text-[12px] transition-all cursor-pointer ${isSelected
-                        ? "bg-[#fff5ee] border-[#ff5400] text-[#ff5400] font-semibold shadow-xs"
-                        : "bg-white border-[#e7e2d8] text-[#1c1917] hover:border-[#78716c] font-normal"
-                      }`}
+                    className={`inline-flex items-center justify-center gap-1.5 h-[34px] px-3.5 rounded-full border text-[13px] font-medium transition-colors duration-75 cursor-pointer select-none ${
+                      isSelected
+                        ? "bg-[#fff5ee] border-[#ff5400] text-[#ff5400] shadow-2xs"
+                        : "bg-white border-[#e7e2d8] text-[#1c1917] hover:border-[#a8a29e]"
+                    }`}
                   >
                     {isSelected && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[#ff5400]">
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     )}
-                    <span>{opt.label}</span>
+                    <span className="leading-none whitespace-nowrap">{opt.label}</span>
                   </button>
                 );
               })}
             </div>
-          </div>
-
-          {/* 6. In Stock Only (Figma node 1194:166) */}
-          <div className="flex items-center justify-between py-1">
-            <span className="text-[14px] font-bold text-[#1c1917]">
-              In Stock Only
-            </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={inStockOnly}
-              onClick={() => setInStockOnly(!inStockOnly)}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${inStockOnly ? "bg-[#ff5400]" : "bg-[#e7e2d8]"
-                }`}
-            >
-              <span
-                className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${inStockOnly ? "translate-x-5" : "translate-x-0"
-                  }`}
-              />
-            </button>
           </div>
         </div>
 

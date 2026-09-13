@@ -1,6 +1,5 @@
 import Image from "next/image";
 import ClientLink from "@/components/ui/navigation/ClientLink";
-import { assets } from "@/lib/assets";
 import { getBannersByPlacement } from "@/services/banner.service";
 
 export default async function SplitStoryBanner() {
@@ -36,7 +35,7 @@ export default async function SplitStoryBanner() {
         {/* Bottom Buttons - Perfectly aligned across container with 12px gap */}
         <div className="relative z-10 flex w-full max-w-full sm:max-w-md items-center gap-[12px]">
           <ClientLink
-            href="/collection/rudraksha"
+            href="/collection/all?types=Rudraksha,Rudraksha+Bracelets&origin=Nepal"
             className="flex flex-1 min-w-0 items-center justify-center rounded-[20px] bg-white px-[18px] py-[10px] shadow-sm transition-transform hover:scale-[1.02] active:scale-[0.98]"
           >
             <span className="truncate text-[12px] font-bold leading-normal text-[#211e1a] text-center whitespace-nowrap">

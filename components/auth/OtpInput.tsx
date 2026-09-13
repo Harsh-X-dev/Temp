@@ -20,16 +20,54 @@ export default function OtpInput({ value, onChange }: OtpInputProps) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
 
   function focusAt(index: number) {
-    refs.current[index]?.focus();
+    if (index >= 0 && index < OTP_LENGTH) {
+      refs.current[index]?.focus();
+    }
+  }
+
+  function handlePastedText(pastedText: string, targetIndex = 0) {
+    const digits = pastedText.replace(/\D/g, "").slice(0, OTP_LENGTH);
+    if (!digits) return;
+
+    const next = [...value];
+    // If a full OTP was pasted or started at box 0, populate from box 0; otherwise populate from targetIndex
+    const startIdx = digits.length === OTP_LENGTH ? 0 : targetIndex;
+    for (let i = 0; i < digits.length && startIdx + i < OTP_LENGTH; i++) {
+      next[startIdx + i] = digits[i];
+    }
+    onChange(next);
+
+    // Focus box after last pasted digit, or the last box if all filled
+    const nextFocus = Math.min(startIdx + digits.length, OTP_LENGTH - 1);
+    focusAt(nextFocus);
   }
 
   function handleChange(index: number, raw: string) {
-    const digit = raw.replace(/\D/g, "").slice(-1); // keep only last digit
-    const next = [...value];
-    next[index] = digit;
-    onChange(next as string[]);
+    const digits = raw.replace(/\D/g, "");
 
-    if (digit && index < OTP_LENGTH - 1) {
+    // Multi-digit paste or SMS autofill detected via onChange
+    if (digits.length > 1) {
+      // If user typed a single character into an already filled box (e.g. "12")
+      if (digits.length === 2 && value[index] && digits.includes(value[index])) {
+        const newDigit = digits.replace(value[index], "").slice(-1) || digits.slice(-1);
+        const next = [...value];
+        next[index] = newDigit;
+        onChange(next);
+        if (index < OTP_LENGTH - 1) focusAt(index + 1);
+        return;
+      }
+
+      // Otherwise it's a multi-character paste / autofill!
+      handlePastedText(digits, index);
+      return;
+    }
+
+    // Single digit entry
+    const next = [...value];
+    next[index] = digits;
+    onChange(next);
+
+    if (digits && index < OTP_LENGTH - 1) {
       focusAt(index + 1);
     }
   }
@@ -55,21 +93,10 @@ export default function OtpInput({ value, onChange }: OtpInputProps) {
     }
   }
 
-  function handlePaste(e: ClipboardEvent<HTMLInputElement>) {
+  function handlePaste(index: number, e: ClipboardEvent<HTMLInputElement>) {
     e.preventDefault();
-    const pasted = e.clipboardData
-      .getData("text")
-      .replace(/\D/g, "")
-      .slice(0, OTP_LENGTH);
-
-    if (!pasted) return;
-
-    const next = Array.from({ length: OTP_LENGTH }, (_, i) => pasted[i] ?? "");
-    onChange(next);
-
-    // Focus the box after the last pasted digit
-    const lastFilledIndex = Math.min(pasted.length, OTP_LENGTH - 1);
-    focusAt(lastFilledIndex);
+    const pasted = e.clipboardData.getData("text");
+    handlePastedText(pasted, index);
   }
 
   return (
@@ -83,12 +110,12 @@ export default function OtpInput({ value, onChange }: OtpInputProps) {
             id={`otp-box-${i}`}
             type="text"
             inputMode="numeric"
-            maxLength={1}
-            size={1}
+            maxLength={OTP_LENGTH}
             value={value[i] ?? ""}
+            onFocus={(e) => e.target.select()}
             onChange={(e) => handleChange(i, e.target.value)}
             onKeyDown={(e) => handleKeyDown(i, e)}
-            onPaste={handlePaste}
+            onPaste={(e) => handlePaste(i, e)}
             autoComplete={i === 0 ? "one-time-code" : "off"}
             aria-label={`OTP digit ${i + 1}`}
             className={[

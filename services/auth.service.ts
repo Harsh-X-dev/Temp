@@ -42,3 +42,32 @@ export async function verifyOtp(
   });
   return res.data;
 }
+
+export interface LogoutResponse {
+  success: boolean;
+  responseCode: number;
+  message: string;
+}
+
+/**
+ * Logout session on the backend.
+ * Clears the refresh_token HttpOnly cookie and revokes the active session on the server.
+ *
+ * Endpoint: POST /api/v1/auth/logout
+ * Headers: Authorization: Bearer <access_token>
+ * Body: {}
+ */
+export async function logoutSession(accessToken?: string): Promise<LogoutResponse | null> {
+  try {
+    const headers: Record<string, string> = {};
+    if (accessToken) {
+      headers["Authorization"] = `Bearer ${accessToken}`;
+    }
+    const res = await api.post<LogoutResponse>("/auth/logout", {}, { headers });
+    return res.data;
+  } catch (error) {
+    console.warn("[auth.service] logoutSession error:", error);
+    return null;
+  }
+}
+

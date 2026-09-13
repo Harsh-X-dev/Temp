@@ -10,6 +10,7 @@ import Select from '@/components/ui/inputs/Select';
 import FormField from '@/components/ui/inputs/FormField';
 import { INDIAN_STATES } from '@/lib/constants/india';
 import { validateAddressForm } from '@/lib/validators';
+import { useKeyboardOffset } from '@/hooks/useKeyboardOffset';
 
 interface AddressFormSheetProps {
   isOpen: boolean;
@@ -187,10 +188,11 @@ export default function AddressFormSheet({
   };
 
   const mounted = useHasMounted();
+  const { keyboardOffset, topOffset, isKeyboardOpen } = useKeyboardOffset(isOpen);
   if (!isOpen || !mounted) return null;
 
   const inputBaseClasses = (invalid = false) =>
-    `h-[44px] w-full rounded-[12px] border px-[16px] font-['Montserrat'] text-[13px] text-[#211e1a] placeholder:text-[#a89a85] outline-none transition-colors focus:border-[#ff5400] focus:ring-1 focus:ring-[#ff5400]/20 ${
+    `h-[44px] w-full rounded-[12px] border px-[16px] font-['Montserrat'] text-[16px] md:text-[13px] text-[#211e1a] placeholder:text-[#a89a85] outline-none transition-colors focus:border-[#ff5400] focus:ring-1 focus:ring-[#ff5400]/20 ${
       invalid ? 'border-red-400 bg-red-50/20' : 'bg-white border-[#e5e0da]'
     }`;
 
@@ -209,6 +211,14 @@ export default function AddressFormSheet({
         aria-modal={isOpen}
         aria-label={title}
         inert={!isOpen}
+        style={{
+          ...(keyboardOffset > 0
+            ? {
+                bottom: `${keyboardOffset}px`,
+                top: `${topOffset}px`,
+              }
+            : {}),
+        }}
         className={`fixed inset-0 z-[130] flex flex-col bg-[#fbf8f4] transition-transform duration-300 ease-out w-full max-w-full overflow-x-hidden ${
           isOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
@@ -226,7 +236,7 @@ export default function AddressFormSheet({
 
         {/* Form Content */}
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col w-full max-w-full" noValidate>
-          <div className="flex-1 overflow-y-auto overflow-x-hidden px-[16px] py-[16px] w-full max-w-full no-scrollbar">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-[16px] py-[16px] pb-[60px] scroll-pb-[80px] w-full max-w-full no-scrollbar">
             <div className="flex flex-col gap-[16px]">
               
               {/* 1. Full Name */}
@@ -300,9 +310,11 @@ export default function AddressFormSheet({
                   type="text"
                   inputMode="numeric"
                   autoComplete="postal-code"
-                  placeholder="Enter pincode"
+                  placeholder="Enter 6-digit pincode"
                   value={form.pincode}
-                  onChange={(e) => updateField('pincode', e.target.value)}
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  onChange={(e) => updateField('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
                   aria-invalid={errors.pincode ? true : undefined}
                   aria-describedby={errors.pincode ? errorId('pincode') : undefined}
                   className={inputBaseClasses(Boolean(errors.pincode))}
@@ -454,7 +466,9 @@ export default function AddressFormSheet({
           </div>
 
           {/* 11. Sticky Bottom Bar matching Figma node 544:96 */}
-          <div className="shrink-0 bg-[#fcf9f5] flex flex-col items-center px-[16px] pt-[14px] pb-[28px] border-t border-[#f0ebe4]/60 w-full max-w-full gap-[10px]">
+          <div className={`shrink-0 bg-[#fcf9f5] flex flex-col items-center px-[16px] border-t border-[#f0ebe4]/60 w-full max-w-full gap-[10px] ${
+            isKeyboardOpen ? 'pt-[10px] pb-[12px]' : 'pt-[14px] pb-[calc(28px+env(safe-area-inset-bottom,0px))]'
+          }`}>
             {/* Backend error popup */}
             {submitError && (
               <div

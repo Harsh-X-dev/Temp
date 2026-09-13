@@ -81,9 +81,13 @@ function normalizeGender(gender?: string | null): string | null {
  */
 function resolveAvatarUrl(profileImage: unknown): string | null {
   if (!profileImage) return null;
-  if (typeof profileImage === "string") return profileImage;
+  if (typeof profileImage === "string") {
+    const trimmed = profileImage.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
   if (typeof profileImage === "object" && "url" in (profileImage as object)) {
-    return (profileImage as { url: string }).url;
+    const url = (profileImage as { url: string }).url;
+    return typeof url === "string" && url.trim().length > 0 ? url.trim() : null;
   }
   return null;
 }
@@ -188,12 +192,41 @@ export async function fetchProfile(
 
 /**
  * Create initial profile and first delivery address via POST /profiles/create-profile.
+ *
+ * The backend's create-profile endpoint does a Supabase UPDATE internally,
+ * so the profiles row must exist before calling it. We upsert the row first
+ * using the service-aware supabase client, then delegate to the backend to
+ * also persist the address_info update in one go.
  */
 export async function createProfile(
   supabase: SupabaseClient,
   input: CreateProfileInput,
 ): Promise<{ success: boolean; addressId: string }> {
   try {
+    // ── Step 1: Ensure the profiles row exists ────────────────────────────
+    // The backend POST /profiles/create-profile does a Supabase UPDATE, which
+    // silently fails (500 "Cannot coerce the result to a single JSON object")
+    // if the row doesn't exist yet. We upsert it first so the backend always
+    // finds an existing row to mutate.
+    const upsertPayload: Record<string, unknown> = {
+      id: input.userId,
+      full_name: input.fullName || "",
+      phone: input.phone || "",
+      address_info: [],
+    };
+    if (input.emailId) upsertPayload.email_id = input.emailId;
+
+    const { error: upsertError } = await supabase
+      .from("profiles")
+      .upsert(upsertPayload, { onConflict: "id", ignoreDuplicates: false });
+
+    if (upsertError) {
+      // Log but don't throw — the backend might still succeed if the row was
+      // created by a trigger between our check and the upsert.
+      console.warn("[createProfile] Supabase upsert warning:", upsertError.message);
+    }
+
+    // ── Step 2: Call backend to persist profile fields + first address ────
     const payload = {
       user_id: input.userId,
       full_name: input.fullName,
@@ -233,11 +266,12 @@ export interface UpdateProfileInput {
   gender?: string | null;
   phone?: string;
   email?: string;
+  avatarUrl?: string | null;
 }
 
 /**
  * Update the authenticated user's profile via PUT /profiles/:userId.
- * Supported fields: full_name, birth_date (YYYY-MM-DD), gender.
+ * Supported fields: full_name, birth_date (YYYY-MM-DD), gender, profile_image (string URL).
  */
 export async function updateProfile(
   supabase: SupabaseClient,
@@ -253,16 +287,32 @@ export async function updateProfile(
     const birthDate = formatToIsoDate(input.birthDate ?? input.dob);
     const gender = normalizeGender(input.gender);
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       full_name: input.fullName,
       birth_date: birthDate,
       gender: gender,
     };
 
+    if (input.avatarUrl !== undefined) {
+      payload.profile_image = input.avatarUrl || "";
+      payload.avatar_url = input.avatarUrl || "";
+    }
+
     const response = await api.put(`/profiles/${user.id}`, payload);
 
     if (response.data && response.data.success === false) {
       throw new Error(response.data.message || "Failed to update profile.");
+    }
+
+    // Also update Supabase profiles table directly for consistency
+    if (input.avatarUrl !== undefined) {
+      await supabase
+        .from("profiles")
+        .update({
+          profile_image: input.avatarUrl || "",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
     }
 
     return {
@@ -275,7 +325,8 @@ export async function updateProfile(
 }
 
 /**
- * Upload an avatar image and update the user's profile image.
+ * Upload an avatar image to storage and return its public URL.
+ * Does NOT call backend PUT or update database — that is only done when form is submitted.
  */
 export async function uploadAvatar(
   supabase: SupabaseClient,
@@ -287,8 +338,8 @@ export async function uploadAvatar(
 
   if (!user) throw new Error("Must be authenticated to upload an avatar.");
 
-  const fileExt = file.name.split('.').pop();
-  const filePath = `${user.id}/avatar_${Date.now()}.${fileExt}`;
+  const fileExt = file.name.split('.').pop() || "jpg";
+  const filePath = `${user.id}/${Date.now()}.${fileExt}`;
 
   const { error: uploadError } = await supabase.storage
     .from("avatars")
@@ -299,21 +350,22 @@ export async function uploadAvatar(
   }
 
   const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
-
-
-  const { error: updateError } = await supabase
-    .from("profiles")
-    .update({
-      profile_image: { url: data.publicUrl },
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", user.id);
-
-  if (updateError) {
-    throw new Error(updateError.message ?? "Failed to update profile with avatar.");
-  }
-
   return data.publicUrl;
+}
+
+/**
+ * Remove an avatar file from storage.
+ */
+export async function deleteAvatar(
+  supabase: SupabaseClient,
+  filePath?: string,
+): Promise<void> {
+  if (!filePath) return;
+  try {
+    await supabase.storage.from("avatars").remove([filePath]);
+  } catch {
+    // Ignore storage deletion errors
+  }
 }
 
 // ---------------------------------------------------------------------------

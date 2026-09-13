@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ['192.168.29.126'],
+  
   images: {
     // Enable modern formats: AVIF (best compression) with WebP fallback.
     // Next.js will serve AVIF to browsers that support it, WebP otherwise.

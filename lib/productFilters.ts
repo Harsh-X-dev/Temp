@@ -29,11 +29,11 @@ export function getWordStems(word: string): string[] {
 export function matchesTypeFilter(typeFilters: string[], product: Product): boolean {
   if (!typeFilters || typeFilters.length === 0) return true;
 
-  const attrGem = String(product.attributes?.gemstone || product.attributes?.gemstone_type || "").toLowerCase();
-  const attrCat = String(product.attributes?.category || product.attributes?.product_type || "").toLowerCase();
+  const attrGem = String(product.attributes?.gemstone || product.attributes?.gemstone_type || "").toLowerCase().trim();
+  const attrCat = String(product.attributes?.category || product.attributes?.product_type || "").toLowerCase().trim();
 
-  const productCollectionStrings = (product.collections || []).map((c) => c.toLowerCase());
-  const productTags = (product.tags || []).map((t) => t.toLowerCase());
+  const productCollectionStrings = (product.collections || []).map((c) => c.toLowerCase().trim()).filter(Boolean);
+  const productTags = (product.tags || []).map((t) => t.toLowerCase().trim());
   const variantLabels = (product.variants || [])
     .map((v) => `${v.option1Value || ""} ${v.option2Value || ""} ${v.label || ""}`)
     .join(" ")
@@ -59,16 +59,19 @@ export function matchesTypeFilter(typeFilters: string[], product: Product): bool
     const type = rawType.toLowerCase().trim();
     if (!type) return false;
 
-    // 1. Direct attribute or collection check
-    if (attrGem && (attrGem.includes(type) || type.includes(attrGem))) return true;
-    if (attrCat && (attrCat.includes(type) || type.includes(attrCat))) return true;
+    // 1. Direct collection check (exact collection or singular/plural match only)
+    if (productCollectionStrings.some((c) => {
+      const cleanC = c.toLowerCase().trim();
+      return cleanC === type || cleanC === type.replace(/s$/, "") || type === cleanC.replace(/s$/, "");
+    })) {
+      return true;
+    }
 
-    if (productCollectionStrings.some((c) => c.includes(type) || type.includes(c))) return true;
+    // 2. Direct attribute check
+    if (attrGem && (attrGem === type || attrGem === type.replace(/s$/, "") || type === attrGem.replace(/s$/, ""))) return true;
+    if (attrCat && (attrCat === type || attrCat === type.replace(/s$/, "") || type === attrCat.replace(/s$/, ""))) return true;
 
-    // 2. Direct string inclusion on all product text
-    if (allProductText.includes(type)) return true;
-
-    // 3. Match by word stems (e.g. "Rings & Pendants" -> ["rings", "ring", "pendants", "pendant"])
+    // 3. Match by word stems (e.g. "Rudraksha Bracelet" -> must have both "rudraksha" and "bracelet" stems)
     const filterWords = type
       .replace(/[&/\\(),+]/g, " ")
       .split(/\s+/)
@@ -76,9 +79,11 @@ export function matchesTypeFilter(typeFilters: string[], product: Product): bool
 
     if (filterWords.length === 0) return false;
 
-    const filterStems = filterWords.flatMap(getWordStems);
-
-    return filterStems.some((stem) => productStems.has(stem) || allProductText.includes(stem));
+    // For multi-word type filters like "Rudraksha Bracelet" or "Rudraksha Mala", each word must match
+    return filterWords.every((word) => {
+      const stems = getWordStems(word);
+      return stems.some((stem) => productStems.has(stem));
+    });
   });
 }
 
@@ -94,6 +99,24 @@ export function matchesMukhiFilter(mukhiFilters: string[], product: Product): bo
     .map((v) => `${v.option1Value || ""} ${v.option2Value || ""} ${v.option3Value || ""} ${v.label || ""}`)
     .join(" ")
     .toLowerCase();
+
+  // If filter is general "all_mukhi" or "mukhi_series"
+  if (
+    mukhiFilters.some(
+      (m) =>
+        m.toLowerCase() === "all_mukhi" ||
+        m.toLowerCase() === "all" ||
+        m.toLowerCase() === "mukhi" ||
+        m.toLowerCase() === "mukhi-series" ||
+        m.toLowerCase() === "mukhi_series"
+    )
+  ) {
+    return Boolean(
+      attrMukhi ||
+      textToMatch.includes("mukhi") ||
+      variantValues.includes("mukhi")
+    );
+  }
 
   return mukhiFilters.some((rawMukhi) => {
     const m = rawMukhi.toLowerCase().trim();

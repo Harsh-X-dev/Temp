@@ -1,11 +1,5 @@
-/**
- * Banner service — the only module that queries the `banners` table.
- *
- * Architecture note:
- *  - This module runs exclusively on the server (imported by Server Components).
- *  - It maps the raw database row shape to the Banner interface consumed by
- *    the carousel components, insulating the UI from schema changes.
- */
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/services/supabase/server";
 import type { Banner } from "@/types/banner.types";
 
@@ -33,42 +27,38 @@ const DEFAULT_HERO_BANNERS: Banner[] = [
   },
 ];
 
+const getCachedHomeBanners = unstable_cache(
+  async (): Promise<Banner[]> => {
+    try {
+      const supabase = createSupabaseServerClient();
+
+      const { data, error } = await supabase
+        .from("banners")
+        .select("id, title, image_url, link_url, sort_order")
+        .eq("is_active", true)
+        .eq("placement", "homepage_hero")
+        .order("sort_order", { ascending: true })
+        .returns<BannerRow[]>();
+
+      if (error || !data || data.length === 0) {
+        return DEFAULT_HERO_BANNERS;
+      }
+
+      return data.map(mapRowToBanner);
+    } catch {
+      return DEFAULT_HERO_BANNERS;
+    }
+  },
+  ["homepage-hero-banners"],
+  { revalidate: 60, tags: ["banners"] }
+);
+
 /**
  * Fetch all active homepage hero banners, ordered by sort_order ascending.
- *
- * Filters:
- *  - is_active = true   (respected by RLS policy "public can read active banners")
- *  - placement = 'homepage_hero'
- *
- * Returns default fallback banners on empty / error for instant zero-latency loading.
  */
-export async function getHomeBanners(): Promise<Banner[]> {
-  try {
-    const supabase = createSupabaseServerClient();
-
-    const { data, error } = await supabase
-      .from("banners")
-      .select("id, title, image_url, link_url, sort_order")
-      .eq("is_active", true)
-      .eq("placement", "homepage_hero")
-      .order("sort_order", { ascending: true })
-      .returns<BannerRow[]>();
-
-    if (error) {
-      console.warn("[BannerService] Database query error, using fallback:", error.message);
-      return DEFAULT_HERO_BANNERS;
-    }
-
-    if (!data || data.length === 0) {
-      return DEFAULT_HERO_BANNERS;
-    }
-
-    return data.map(mapRowToBanner);
-  } catch (err) {
-    console.warn("[BannerService] Failed to fetch banners:", err);
-    return DEFAULT_HERO_BANNERS;
-  }
-}
+export const getHomeBanners = cache(async function getHomeBanners(): Promise<Banner[]> {
+  return getCachedHomeBanners();
+});
 
 /**
  * Maps a raw database row to the Banner interface the carousel expects.
@@ -77,40 +67,51 @@ export async function getHomeBanners(): Promise<Banner[]> {
  * The carousel's BannerSlide component handles these gracefully when empty.
  */
 function mapRowToBanner(row: BannerRow): Banner {
+  let buttonHref = row.link_url || "/collection/all";
+  if (!row.link_url && row.title && row.title.toLowerCase().includes("mukhi")) {
+    buttonHref = "/collection/all?mukhi=all_mukhi";
+  }
+
   return {
     id: row.id,
     title: row.title ?? "",
     subtitle: "",
     buttonText: "Shop now",
-    // buttonHref: row.link_url ?? "/shop",
-    buttonHref: "/collection/all",
+    buttonHref,
     image: row.image_url,
     imageAlt: row.title ?? "Banner",
   };
 }
 
+const getCachedBannersByPlacement = unstable_cache(
+  async (placement: string): Promise<Banner[]> => {
+    try {
+      const supabase = createSupabaseServerClient();
+
+      const { data, error } = await supabase
+        .from("banners")
+        .select("id, title, image_url, link_url, sort_order")
+        .eq("is_active", true)
+        .eq("placement", placement)
+        .order("sort_order", { ascending: true })
+        .returns<BannerRow[]>();
+
+      if (error || !data || data.length === 0) {
+        return [];
+      }
+
+      return data.map(mapRowToBanner);
+    } catch {
+      return [];
+    }
+  },
+  ["banners-by-placement"],
+  { revalidate: 60, tags: ["banners"] }
+);
+
 /**
  * Fetch banners by a specific placement value.
  */
-export async function getBannersByPlacement(placement: string): Promise<Banner[]> {
-  const supabase = createSupabaseServerClient();
-
-  const { data, error } = await supabase
-    .from("banners")
-    .select("id, title, image_url, link_url, sort_order")
-    .eq("is_active", true)
-    .eq("placement", placement)
-    .order("sort_order", { ascending: true })
-    .returns<BannerRow[]>();
-
-  if (error) {
-    console.error(`[BannerService] Failed to fetch banners for placement: ${placement}:`, error.message);
-    return [];
-  }
-
-  if (!data || data.length === 0) {
-    return [];
-  }
-
-  return data.map(mapRowToBanner);
-}
+export const getBannersByPlacement = cache(async function getBannersByPlacement(placement: string): Promise<Banner[]> {
+  return getCachedBannersByPlacement(placement);
+});

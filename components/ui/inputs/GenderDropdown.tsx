@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 
-const GENDER_OPTIONS = ["Female", "Male", "Other", "Prefer not to say"] as const;
+const GENDER_OPTIONS = ["Female", "Male", "Other"] as const;
 
 export default function GenderDropdown({
   value,
@@ -58,7 +58,7 @@ export default function GenderDropdown({
       {/* Dropdown panel */}
       {open && (
         <div
-          className="absolute top-full left-0 z-50 mt-1 min-w-[160px] bg-white rounded-[14px] shadow-[0px_8px_24px_rgba(0,0,0,0.12)] border border-border-light overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
+          className="absolute top-full left-0 z-50 mt-1 w-full min-w-full bg-white rounded-[14px] shadow-[0px_8px_24px_rgba(0,0,0,0.12)] border border-border-light overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
           style={{ width: ref.current?.offsetWidth }}
         >
           {GENDER_OPTIONS.map((option) => {
@@ -71,15 +71,15 @@ export default function GenderDropdown({
                   onChange(option);
                   setOpen(false);
                 }}
-                className={`w-full flex items-center justify-between px-4 py-3 text-[14px] font-medium transition-colors cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 md:px-4 py-2.5 md:py-3 text-[13px] md:text-[14px] font-medium transition-colors cursor-pointer ${
                   selected
                     ? "bg-primary-orange text-white"
                     : "text-text-primary hover:bg-gray-50"
                 }`}
               >
-                {option}
+                <span className="truncate">{option}</span>
                 {selected && (
-                  <svg className="w-[16px] h-[16px] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <svg className="w-[16px] h-[16px] shrink-0 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 )}

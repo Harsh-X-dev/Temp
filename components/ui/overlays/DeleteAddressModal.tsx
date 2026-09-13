@@ -49,7 +49,7 @@ export default function DeleteAddressModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity duration-200"
@@ -65,7 +65,7 @@ export default function DeleteAddressModal({
         aria-modal="true"
         aria-labelledby="delete-address-title"
         aria-describedby="delete-address-desc"
-        className="relative w-full max-w-[358px] rounded-[12px] bg-white shadow-[0px_4px_24px_0px_rgba(0,0,0,0.15)] border border-[#e5e0da] flex flex-col items-center px-[22px] pt-[16px] pb-[28px] z-[151]"
+        className="relative w-full max-w-[358px] rounded-[12px] bg-white shadow-[0px_4px_24px_0px_rgba(0,0,0,0.15)] border border-[#e5e0da] flex flex-col items-center px-[22px] pt-[16px] pb-[28px] z-[301]"
       >
         {/* Title */}
         <h3

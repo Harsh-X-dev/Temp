@@ -13,6 +13,7 @@
  *   2. "Proceed to Checkout" from cart — all cart items
  */
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { CheckoutItem, CheckoutSource, Coupon, CalculateCheckoutResponse } from "@/types/checkout.types";
 
 interface CheckoutState {
@@ -66,52 +67,63 @@ const initialState = {
   calculationData: null as CalculateCheckoutResponse['data'] | null,
 };
 
-export const useCheckoutStore = create<CheckoutState>()((set) => ({
-  ...initialState,
+export const useCheckoutStore = create<CheckoutState>()(
+  persist(
+    (set) => ({
+      ...initialState,
 
-  startBuyNow: (item) =>
-    set(() => ({
-      source: "buy-now",
-      items: [
-        {
-          ...item,
-          variantLabel: item.variantLabel ? item.variantLabel.replace(/\s*\/\s*/g, ', ') : item.variantLabel,
-        },
-      ],
-      selectedAddressId: null,
-      selectedCoupon: null,
-      calculationData: null,
-    })),
+      startBuyNow: (item) =>
+        set((state) => {
+          const isSameItem = state.items.length === 1 && state.items[0].variantId === item.variantId;
+          return {
+            source: "buy-now",
+            items: [
+              {
+                ...item,
+                variantLabel: item.variantLabel ? item.variantLabel.replace(/\s*\/\s*/g, ', ') : item.variantLabel,
+              },
+            ],
+            selectedAddressId: state.selectedAddressId ?? null,
+            selectedCoupon: state.selectedCoupon ?? null,
+            calculationData: isSameItem ? state.calculationData : null,
+          };
+        }),
 
-  startCartCheckout: (items) =>
-    set((state) => ({
-      source: "cart",
-      items: items.map((item) => ({
-        ...item,
-        variantLabel: item.variantLabel ? item.variantLabel.replace(/\s*\/\s*/g, ', ') : item.variantLabel,
-      })),
-      selectedAddressId: state.selectedAddressId,
-      selectedCoupon: state.selectedCoupon,
-      calculationData: state.calculationData,
-    })),
+      startCartCheckout: (items) =>
+        set((state) => ({
+          source: "cart",
+          items: items.map((item) => ({
+            ...item,
+            variantLabel: item.variantLabel ? item.variantLabel.replace(/\s*\/\s*/g, ', ') : item.variantLabel,
+          })),
+          selectedAddressId: state.selectedAddressId,
+          selectedCoupon: state.selectedCoupon,
+          calculationData: state.calculationData,
+        })),
 
-  setSelectedAddress: (addressId) => set({ selectedAddressId: addressId }),
+      setSelectedAddress: (addressId) => set({ selectedAddressId: addressId }),
 
-  setCoupon: (coupon) => set({ selectedCoupon: coupon }),
+      setCoupon: (coupon) => set({ selectedCoupon: coupon }),
 
-  setCalculationData: (data) => set({ calculationData: data }),
+      setCalculationData: (data) => set({ calculationData: data }),
 
-  updateQuantity: (key, quantity) =>
-    set((state) => ({
-      items: state.items.map((item) =>
-        `${item.productId}::${item.variantId}` === key ? { ...item, quantity } : item
-      ),
-    })),
+      updateQuantity: (key, quantity) =>
+        set((state) => ({
+          items: state.items.map((item) =>
+            `${item.productId}::${item.variantId}` === key ? { ...item, quantity } : item
+          ),
+        })),
 
-  removeItem: (key) =>
-    set((state) => ({
-      items: state.items.filter((item) => `${item.productId}::${item.variantId}` !== key),
-    })),
+      removeItem: (key) =>
+        set((state) => ({
+          items: state.items.filter((item) => `${item.productId}::${item.variantId}` !== key),
+        })),
 
-  reset: () => set(initialState),
-}));
+      reset: () => set(initialState),
+    }),
+    {
+      name: "gemostone_checkout_session",
+      storage: createJSONStorage(() => (typeof window !== "undefined" ? window.sessionStorage : localStorage)),
+    }
+  )
+);

@@ -44,7 +44,7 @@ export default function SearchClient({
   const searchParams = useSearchParams();
   const initialUrlQuery = searchParams.get("q") || "";
 
-  const [isMounted, setIsMounted] = useState(false);
+  const [isMounted, setIsMounted] = useState(() => typeof window !== "undefined");
   const [query, setQuery] = useState(initialUrlQuery);
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(Boolean(initialUrlQuery));
@@ -52,7 +52,15 @@ export default function SearchClient({
   const [categories, setCategories] = useState<CategoryConfig[]>(initialCategories);
   const [isCategoriesLoading, setIsCategoriesLoading] = useState(initialCategories.length === 0);
   const [filterMetadata, setFilterMetadata] = useState<FilterMetadata | undefined>(initialFilterMetadata);
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem("recentSearches");
+      return saved ? JSON.parse(saved).slice(0, 5) : [];
+    } catch {
+      return [];
+    }
+  });
   const [trendingSearches, setTrendingSearches] = useState<string[]>(initialTrending);
   const [isTrendingLoading, setIsTrendingLoading] = useState(initialTrending.length === 0);
 
@@ -224,7 +232,6 @@ export default function SearchClient({
   const mukhiParam = searchParams.get("mukhi");
   const originParam = searchParams.get("origin");
   const ratingParam = searchParams.get("rating");
-  const inStockParam = searchParams.get("inStock");
 
   let displayedResults = results;
 
@@ -274,10 +281,6 @@ export default function SearchClient({
     if (!isNaN(ratingVal)) {
       displayedResults = displayedResults.filter((p) => (p.rating || 0) >= ratingVal);
     }
-  }
-
-  if (inStockParam === "true") {
-    displayedResults = displayedResults.filter((p) => p.variants && p.variants.some((v) => v.isActive));
   }
 
   if (!isMounted && !initialUrlQuery) {
@@ -357,32 +360,44 @@ export default function SearchClient({
                 </>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => setIsFilterOpen(true)}
-                    aria-expanded={isFilterOpen}
-                    aria-haspopup="dialog"
-                    className={`border flex items-center gap-1.5 px-4 py-1.5 sm:py-2 rounded-[20px] text-[12px] font-semibold transition-colors cursor-pointer ${
-                      isFilterOpen
-                        ? "border-primary-orange bg-[#fff5ee] text-primary-orange"
-                        : "bg-white border-[#e5e0da] text-[#6b6459] hover:text-[#211e1a] hover:border-[#211e1a]"
-                    }`}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className={`size-3.5 ${isFilterOpen ? "text-primary-orange" : "text-[#6b6459]"}`}
-                      aria-hidden="true"
-                    >
-                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                    </svg>
-                    <span>Filters</span>
-                  </button>
+                  {(() => {
+                    const isFilterActive =
+                      isFilterOpen ||
+                      Boolean(minPriceParam) ||
+                      Boolean(maxPriceParam) ||
+                      Boolean(typesParam) ||
+                      Boolean(mukhiParam) ||
+                      Boolean(originParam) ||
+                      Boolean(ratingParam);
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setIsFilterOpen(true)}
+                        aria-expanded={isFilterOpen}
+                        aria-haspopup="dialog"
+                        className={`border flex items-center gap-1.5 px-4 py-1.5 sm:py-2 rounded-[20px] text-[12px] font-semibold transition-colors cursor-pointer ${
+                          isFilterActive
+                            ? "border-primary-orange bg-[#fff5ee] text-primary-orange"
+                            : "bg-white border-[#e5e0da] text-[#6b6459] hover:text-[#211e1a] hover:border-[#211e1a]"
+                        }`}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill={isFilterActive ? "currentColor" : "none"}
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className={`size-3.5 ${isFilterActive ? "text-primary-orange fill-primary-orange" : "text-[#6b6459]"}`}
+                          aria-hidden="true"
+                        >
+                          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                        </svg>
+                        <span>Filters</span>
+                      </button>
+                    );
+                  })()}
 
                   <button
                     type="button"

@@ -34,6 +34,7 @@ import type { PaymentFlowState, RazorpaySuccessResponse } from '@/types/payment.
 import { PaymentError } from '@/types/payment.types';
 import { verifyRazorpayPayment, markPaymentFailed } from '@/services/payment.service';
 import { createPrepaidOrder, type PrepaidOrderResponse } from '@/services/checkout.service';
+import { isSyntheticEmail } from '@/lib/validators';
 
 // ---------------------------------------------------------------------------
 // Hook � owns all payment logic and state
@@ -219,7 +220,12 @@ export function useRazorpayCheckout({
           handler: onPaymentSuccess,
           prefill: {
             name: user?.name ?? '',
-            email: user?.email ?? '',
+            email:
+              user?.email && !isSyntheticEmail(user.email)
+                ? user.email
+                : profile?.email && !isSyntheticEmail(profile.email)
+                ? profile.email
+                : '',
           },
           theme: { color: '#ff5400' },
           modal: {

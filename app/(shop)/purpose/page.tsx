@@ -7,6 +7,8 @@ export const metadata: Metadata = {
   description: "Filter gemstones and spiritual jewelry by intention and life purpose.",
 };
 
+export const revalidate = 3600;
+
 export default async function PurposePage() {
   const purposes = await getActivePurposes();
   return <PurposeClient purposes={purposes} />;

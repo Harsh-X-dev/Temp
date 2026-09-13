@@ -29,6 +29,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/auth.store';
 import { useAddressForm } from '@/hooks/useAddressForm';
 import { toast } from '@/lib/toast';
+import CheckoutSkeleton from '@/components/checkout/CheckoutSkeleton';
 
 /**
  * Checkout page — the single unified checkout experience.
@@ -162,9 +163,17 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!mounted || items.length === 0) return;
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const validItems = items.filter((i) => {
+      const cleanId = i.variantId ? i.variantId.replace('-energized', '') : '';
+      return uuidRegex.test(cleanId);
+    });
+
+    if (validItems.length === 0) return;
+
     let isSubscribed = true;
     calculateCheckoutPricesApi({
-      items: items.map((i) => ({
+      items: validItems.map((i) => ({
         variant_id: i.variantId ? i.variantId.replace('-energized', '') : i.variantId,
         quantity: i.quantity,
         is_energization_addon: Boolean((i as any).isEnergized || i.variantId?.includes?.('-energized')),
@@ -224,9 +233,14 @@ export default function CheckoutPage() {
 
     const afterProductDiscount = rawSubtotal - productDiscount;
     const couponDiscount = calculateCouponDiscount(selectedCoupon, afterProductDiscount);
-    const deliveryCharges = calculationData?.shipping_amount || 0;
+    const isFreeDelivery = Boolean(
+      selectedCoupon?.isFreeShipping ||
+      selectedCoupon?.discountType === "free_shipping" ||
+      afterProductDiscount >= 999
+    );
+    const deliveryCharges = isFreeDelivery ? 0 : 99;
     const taxableAmount = Math.max(0, afterProductDiscount - couponDiscount);
-    const taxes = calculationData?.tax_amount || 0;
+    const taxes = 0;
     const grandTotal = Math.max(0, taxableAmount + deliveryCharges + taxes);
 
     return {
@@ -283,24 +297,7 @@ export default function CheckoutPage() {
 
   // ── Render guards ───────────────────────────────────────────────────
   if (!mounted || authLoading) {
-    return (
-      <div className="min-h-screen bg-[#fbf8f4] flex flex-col items-center w-full font-['Montserrat']">
-        <div className="w-full max-w-full md:max-w-[480px] mx-auto min-h-screen flex flex-col bg-[#fbf8f4] relative md:border-x md:border-[#e5e0da]">
-          <header className="sticky top-0 z-50 flex h-[56px] items-center justify-between border-b border-[#e5e0da] bg-white px-4">
-            <div className="flex items-center gap-3">
-              <div className="size-8 rounded-full animate-shimmer" />
-              <div className="h-5 w-24 rounded-[6px] animate-shimmer" />
-            </div>
-          </header>
-          <main className="w-full px-[16px] pt-[16px] pb-24 flex flex-col gap-[16px] flex-1">
-            <div className="h-[90px] w-full rounded-[16px] border border-[#e5e0da] bg-white p-4 animate-shimmer" />
-            <div className="h-[100px] w-full rounded-[16px] border border-[#e5e0da] bg-white p-4 animate-shimmer" />
-            <div className="h-[64px] w-full rounded-[16px] border border-[#e5e0da] bg-white p-4 animate-shimmer" />
-            <div className="h-[200px] w-full rounded-[16px] border border-[#e5e0da] bg-white p-4 animate-shimmer" />
-          </main>
-        </div>
-      </div>
-    );
+    return <CheckoutSkeleton />;
   }
   if (!isAuthenticated) return null;
   if (!source || items.length === 0) return null;
