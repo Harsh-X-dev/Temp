@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import PhoneStep from "@/components/auth/PhoneStep";
 import OtpStep from "@/components/auth/OtpStep";
 import VerificationSuccessScreen from "@/components/auth/VerificationSuccessScreen";
@@ -24,8 +23,6 @@ import type { Address } from "@/components/account/types";
  *               → (new user without profile → InitialProfileCreationSheet → redirectTo)
  */
 export default function LoginFlow() {
-  const router = useRouter();
-
   const {
     step,
     phone,
@@ -61,7 +58,8 @@ export default function LoginFlow() {
 
       // Default to / unless an explicit redirect destination was provided (e.g. /checkout)
       const destination = redirectTo || "/";
-      router.push(destination);
+      // Hard cache-busting navigation: avoids serving stale pre-login renders from Next.js Client Router Cache
+      window.location.assign(destination);
     } catch (err: any) {
       setProfileError(err.message || "Failed to create profile. Please try again.");
     } finally {
@@ -72,7 +70,8 @@ export default function LoginFlow() {
   const addrForm = useAddressForm({
     onSaved: (newAddress: Address) => {
       setAddresses([...addresses, newAddress]);
-      router.push(redirectTo);
+      // Hard cache-busting navigation: avoids serving stale pre-login renders
+      window.location.assign(redirectTo);
     },
   });
 
@@ -105,7 +104,7 @@ export default function LoginFlow() {
         {step === "success" && (
           <VerificationSuccessScreen
             onAddAddress={addrForm.openCreate}
-            onSkip={() => router.push(redirectTo)}
+            onSkip={() => window.location.assign(redirectTo)}
           />
         )}
       </AuthLayout>
@@ -114,7 +113,7 @@ export default function LoginFlow() {
       {step === "create_profile" && (
         <InitialProfileCreationSheet
           isOpen={step === "create_profile"}
-          onClose={() => router.push(redirectTo)}
+          onClose={() => window.location.assign(redirectTo)}
           userId={user?.id || ""}
           phone={
             phone ||

@@ -61,10 +61,13 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Router Cache: dynamic navigations must NOT be cached (0s) so that route-protecting
+  // proxy.ts (middleware) and session cookies re-run on every navigation. Raising dynamic
+  // above 0 allows the client router cache to serve stale pre-login pages to newly authenticated users.
   experimental: {
     staleTimes: {
-      dynamic: 300,
-      static: 300,
+      dynamic: 0, // restore Next.js default — never cache dynamic navigations
+      static: 60, // reduced from 300s to avoid long-lived stale pages with per-user auth state
     },
   },
 };

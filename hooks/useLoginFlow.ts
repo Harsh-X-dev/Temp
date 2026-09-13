@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { isValidPhone, isValidOtp, isProfileComplete } from "@/lib/validators";
 import { sendOtp, verifyOtp } from "@/services/auth.service";
 import { OTP_LENGTH, RESEND_SECONDS } from "@/lib/constants/auth";
@@ -51,12 +51,11 @@ function emptyOtp(): string[] {
  *   1. User enters phone → handlePhoneSubmit → sendOtp → step "otp"
  *   2. User enters OTP  → handleOtpSubmit  → verifyOtp → setSession
  *                       → fetchProfileWithAddresses → populate store
- *                       → existing user (has address) → router.push(redirectTo)
+ *                       → existing user (has address) → window.location.assign(redirectTo)
  *                       → new user (no address)       → step "create_profile"
  *   3. Resend           → handleResend → sendOtp → refresh verificationId + countdown
  */
 export function useLoginFlow() {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   /** Destination after successful login — falls back to home. */
@@ -234,7 +233,9 @@ export function useLoginFlow() {
           setAddresses(resolution.addresses);
           setStoreLoading(false);
           setInitialized(true);
-          router.push(redirectTo || "/");
+          // Hard cache-busting navigation: prevents Next.js Client Router Cache
+          // from serving stale pre-login renders of the destination route.
+          window.location.assign(redirectTo || "/");
           break;
         }
 
